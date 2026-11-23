@@ -50,7 +50,9 @@ import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.VideoGroup;
+import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VideoLoaderController;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.manager.PlayerUI;
+import com.liskovsoft.smartyoutubetv2.tv.ui.widgets.embedplayer.PreviewPlayerHandoff;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.ChatReceiver;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.SeekBarSegment;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter;
@@ -62,6 +64,7 @@ import com.liskovsoft.smartyoutubetv2.common.exoplayer.other.SubtitleManager;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.FormatItem;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.versions.renderer.CustomOverridesRenderersFactory;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.versions.selector.RestoreTrackSelector;
+import com.liskovsoft.smartyoutubetv2.common.exoplayer.versions.selector.StagedUpgradeTrackSelection;
 import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
@@ -125,6 +128,36 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
     private Boolean mIsControlsShownPreviously;
     private Video mPendingFocus;
     private String mSelectedVideoId;
+    private boolean mIsHandoffSession;
+    private boolean mFastStartVideoLocked;
+
+    // 5-second clickable Apple TV Liquid Glass SponsorBlock skip popup
+    private static final long SPONSOR_POPUP_DURATION_MS = 5_000L;
+    private final android.os.Handler mCinemaHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private View mSponsorSkipPopup;
+    private android.widget.TextView mSponsorSkipLabel;
+    private android.widget.TextView mSponsorSkipTimer;
+    private long mPendingSponsorSkipPosMs = -1L;
+    private long mSponsorPopupEndTimeMs = 0L;
+    private boolean mSponsorPopupVisible = false;
+    private final Runnable mSponsorCountdownTick = new Runnable() {
+        @Override
+        public void run() {
+            if (!mSponsorPopupVisible) {
+                return;
+            }
+            long remainingMs = mSponsorPopupEndTimeMs - System.currentTimeMillis();
+            if (remainingMs <= 0) {
+                hideSponsorSkipPopup();
+                return;
+            }
+            if (mSponsorSkipTimer != null) {
+                int secs = (int) Math.ceil(remainingMs / 1000.0);
+                mSponsorSkipTimer.setText(secs + "s");
+            }
+            mCinemaHandler.postDelayed(this, 250L);
+        }
+    };
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -172,7 +205,121 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
         // ProgressBar.setRootView already called at this moment.
         ProgressBarManager.setup(getProgressBarManager(), (ViewGroup) root);
 
+        bindSponsorSkipPopup(root);
+
         return root;
+    }
+
+    private void bindSponsorSkipPopup(@Nullable View root) {
+        if (root == null) {
+            return;
+        }
+        mSponsorSkipPopup = root.findViewById(R.id.cinema_sponsor_skip_popup);
+        mSponsorSkipLabel = root.findViewById(R.id.cinema_sponsor_skip_label);
+        mSponsorSkipTimer = root.findViewById(R.id.cinema_sponsor_skip_timer);
+        if (mSponsorSkipPopup != null) {
+            mSponsorSkipPopup.setOnClickListener(v -> triggerSponsorSkip());
+        }
+    }
+
+    @Override
+    public void showSponsorSkipPopup(long skipPosMs, String categoryLabel) {
+        mCinemaHandler.post(() -> {
+            if (mSponsorSkipPopup == null || getContext() == null || !isResumed()) {
+                return;
+            }
+            if (isSuggestionsShown()) {
+                return;
+            }
+            mPendingSponsorSkipPosMs = skipPosMs;
+            mSponsorPopupEndTimeMs = System.currentTimeMillis() + SPONSOR_POPUP_DURATION_MS;
+            mSponsorPopupVisible = true;
+
+            if (mSponsorSkipLabel != null) {
+                String cleanCat = (categoryLabel != null && !categoryLabel.trim().isEmpty())
+                        ? categoryLabel.trim() : "Sponsor";
+                String lowerCat = cleanCat.toLowerCase();
+                String text = (lowerCat.contains("segment") || lowerCat.contains("section"))
+                        ? ("Skip " + cleanCat)
+                        : ("Skip " + cleanCat + " Segment");
+                mSponsorSkipLabel.setText(text);
+            }
+            if (mSponsorSkipTimer != null) {
+                mSponsorSkipTimer.setText("5s");
+            }
+
+            float density = getResources().getDisplayMetrics().density;
+            mSponsorSkipPopup.animate().cancel();
+            mSponsorSkipPopup.setVisibility(View.VISIBLE);
+            mSponsorSkipPopup.setAlpha(0f);
+            mSponsorSkipPopup.setTranslationX(36f * density);
+            mSponsorSkipPopup.animate()
+                    .alpha(1f)
+                    .translationX(0f)
+                    .setDuration(240)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                    .start();
+
+            mCinemaHandler.removeCallbacks(mSponsorCountdownTick);
+            mCinemaHandler.postDelayed(mSponsorCountdownTick, 250L);
+        });
+    }
+
+    @Override
+    public void hideSponsorSkipPopup() {
+        mCinemaHandler.post(() -> {
+            mCinemaHandler.removeCallbacks(mSponsorCountdownTick);
+            mSponsorPopupVisible = false;
+            mPendingSponsorSkipPosMs = -1L;
+            if (mSponsorSkipPopup != null && mSponsorSkipPopup.getVisibility() == View.VISIBLE) {
+                float density = getResources().getDisplayMetrics().density;
+                mSponsorSkipPopup.animate().cancel();
+                mSponsorSkipPopup.animate()
+                        .alpha(0f)
+                        .translationX(28f * density)
+                        .setDuration(180)
+                        .withEndAction(() -> {
+                            if (!mSponsorPopupVisible && mSponsorSkipPopup != null) {
+                                mSponsorSkipPopup.setVisibility(View.GONE);
+                            }
+                        })
+                        .start();
+            }
+        });
+    }
+
+    private void triggerSponsorSkip() {
+        long targetPos = mPendingSponsorSkipPosMs;
+        hideSponsorSkipPopup();
+        if (targetPos > 0 && mExoPlayerController != null) {
+            long dur = getDurationMs();
+            setPositionMs(dur > 0 ? Math.min(targetPos, dur) : targetPos);
+        }
+    }
+
+    public boolean consumeSponsorPopupKey(KeyEvent event) {
+        if (!mSponsorPopupVisible || event == null) {
+            return false;
+        }
+        int code = event.getKeyCode();
+        if (code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
+                || code == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+            if (event.getAction() == KeyEvent.ACTION_UP) {
+                triggerSponsorSkip();
+            }
+            return true;
+        }
+        if (code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_ESCAPE) {
+            if (event.getAction() == KeyEvent.ACTION_UP) {
+                hideSponsorSkipPopup();
+            }
+            return true;
+        }
+        // Any navigation key dismisses the popup gracefully so controls work unobstructed
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            hideSponsorSkipPopup();
+        }
+        return false;
     }
 
     @Override
@@ -240,6 +387,7 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
 
     @Override
     public void onPause() {
+        hideSponsorSkipPopup();
         super.onPause();
 
         // NOTE: don't move this into another place! Multiple components rely on it.
@@ -394,7 +542,86 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
         createPlayerObjects();
 
         mPlaybackPresenter.setView(this); // replaced by the embed player?
-        mPlaybackPresenter.onEngineInitialized();
+        if (mIsHandoffSession) {
+            mIsHandoffSession = false;
+            mFastStartVideoLocked = false;
+            Video video = mPlaybackPresenter.getVideo();
+            if (video != null) {
+                setVideo(video);
+            }
+            if (mPlayer != null && mPlayer.getVideoFormat() != null) {
+                com.google.android.exoplayer2.Format vf = mPlayer.getVideoFormat();
+                if (vf.width > 0 && vf.height > 0) {
+                    onVideoSizeChanged(vf.width, vf.height);
+                }
+            }
+            // Immediately expand buffer ceiling from 5.5s preview cap -> full 30s fullscreen buffer
+            // AND promote StagedUpgradeTrackSelection so the VERY NEXT network chunk downloads at
+            // full 1080p/4K quality seamlessly with ZERO buffer flush and ZERO spinner!
+            if (mPlayerInitializer != null) {
+                mPlayerInitializer.expandBufferForFullscreen();
+            }
+            mExoPlayerController.promoteStagedQuality();
+            mExoPlayerController.refreshQualityInfo();
+
+            VideoLoaderController loader = mPlaybackPresenter.getController(VideoLoaderController.class);
+            if (loader != null && video != null && video.videoId != null) {
+                loader.skipNextLoadForHandoff(video.videoId);
+            }
+            mPlaybackPresenter.onEngineInitialized();
+            if (getProgressBarManager() != null && mPlayer != null
+                    && mPlayer.getPlaybackState() == Player.STATE_READY) {
+                getProgressBarManager().hide();
+            }
+            android.util.Log.d("CinemaHandoff", "Adopted live preview player (zero-flush next-chunk upgrade armed): state="
+                    + (mPlayer != null ? mPlayer.getPlaybackState() : -1)
+                    + " posMs=" + (mPlayer != null ? mPlayer.getCurrentPosition() : -1)
+                    + " bufMs=" + (mPlayer != null ? mPlayer.getBufferedPosition() : -1));
+            // Re-enable user subtitles if configured once playback is live
+            scheduleSubtitleRestoreIfNeeded(mPlayer);
+        } else {
+            // Cold click: start fast on same-codec 720p (via StagedUpgradeTrackSelection) so Frame 1
+            // renders rapidly, then promote to full 1080p/4K on the VERY NEXT chunk the exact moment
+            // STATE_READY fires (event-driven, never times out on slow networks).
+            mFastStartVideoLocked = false;
+            mPlaybackPresenter.onEngineInitialized();
+            attachStagedPromoteOnReady(mPlayer);
+        }
+    }
+
+    private void attachStagedPromoteOnReady(final SimpleExoPlayer targetPlayer) {
+        if (targetPlayer == null) {
+            return;
+        }
+        if (targetPlayer.getPlaybackState() == Player.STATE_READY) {
+            if (mExoPlayerController != null) {
+                mExoPlayerController.promoteStagedQuality();
+            }
+            return;
+        }
+        targetPlayer.addListener(new Player.EventListener() {
+            @Override
+            public void onPlayerStateChanged(boolean playWhenReady, int playbackState) {
+                if (playbackState == Player.STATE_READY) {
+                    targetPlayer.removeListener(this);
+                    if (mPlayer == targetPlayer && mExoPlayerController != null) {
+                        mExoPlayerController.promoteStagedQuality();
+                    }
+                }
+            }
+        });
+    }
+
+    private void scheduleSubtitleRestoreIfNeeded(final SimpleExoPlayer targetPlayer) {
+        mCinemaHandler.postDelayed(() -> {
+            if (mPlayer != targetPlayer || mExoPlayerController == null || getContext() == null) {
+                return;
+            }
+            FormatItem targetSubFmt = getPlayerData().getFormat(FormatItem.TYPE_SUBTITLE);
+            if (targetSubFmt != null && !FormatItem.SUBTITLE_NONE.equals(targetSubFmt)) {
+                mExoPlayerController.selectFormatTransient(targetSubFmt);
+            }
+        }, 1_500L);
     }
 
     private void destroyPlayerObjects() {
@@ -478,9 +705,42 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
     }
 
     private void createPlayer() {
-        // Use default or pass your bandwidthMeter here: bandwidthMeter = new DefaultBandwidthMeter.Builder(getContext()).build()
-        DefaultTrackSelector trackSelector = new RestoreTrackSelector(new AdaptiveTrackSelection.Factory());
+        Video targetVideo = mPlaybackPresenter != null ? mPlaybackPresenter.getVideo() : null;
+        PreviewPlayerHandoff.Session handoff = targetVideo != null
+                ? PreviewPlayerHandoff.consume(targetVideo.videoId)
+                : null;
+        if (handoff != null) {
+            mIsHandoffSession = true;
+            if (mPlayerInitializer != null) {
+                mPlayerInitializer.release();
+            }
+            if (mExoPlayerController != null) {
+                mExoPlayerController.release();
+            }
+            mPlayerInitializer = handoff.initializer;
+            mExoPlayerController = handoff.controller;
+            mPlayer = handoff.player;
+            if (handoff.video != null && targetVideo != null) {
+                if (TextUtils.isEmpty(targetVideo.channelId)) {
+                    targetVideo.channelId = handoff.video.channelId;
+                }
+                if (TextUtils.isEmpty(targetVideo.description)) {
+                    targetVideo.description = handoff.video.description;
+                }
+            }
+            mExoPlayerController.setVideo(targetVideo != null ? targetVideo : handoff.video);
+            mPlayer.setPlayWhenReady(true);
+            return;
+        }
+        mIsHandoffSession = false;
+
+        // Staged two-tier track selection: fast-starts on same-codec 720p and seamlessly promotes
+        // to full 1080p/4K on the next buffer chunk without flushing the buffer or showing a spinner.
+        StagedUpgradeTrackSelection.Factory stagedFactory = new StagedUpgradeTrackSelection.Factory();
+        DefaultTrackSelector trackSelector = new RestoreTrackSelector(stagedFactory);
         mExoPlayerController.setTrackSelector(trackSelector);
+        mExoPlayerController.setStagedTrackFactory(stagedFactory);
+        mExoPlayerController.setStagedFastStartEnabled(true);
 
         DefaultRenderersFactory renderersFactory = new CustomOverridesRenderersFactory(getContext());
         mPlayer = mPlayerInitializer.createPlayer(getContext(), renderersFactory, trackSelector);
@@ -1037,6 +1297,11 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
 
     @Override
     public void setFormat(FormatItem formatItem) {
+        if (mFastStartVideoLocked && formatItem != null
+                && formatItem.getType() == FormatItem.TYPE_VIDEO
+                && mPlayer != null && mPlayer.getPlaybackState() != Player.STATE_READY) {
+            return;
+        }
         // Android 4.4 fix for format selection dialog (player destroyed when dialog is focused)
         mExoPlayerController.selectFormat(formatItem);
     }
@@ -1224,6 +1489,7 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
 
     @Override
     public void showControlsOverlay(boolean runAnimation) {
+        hideSponsorSkipPopup();
         super.showControlsOverlay(mIsUIAnimationsEnabled);
 
         // Do throttle. Called so many times. Rely on boxing because initial state is unknown.
@@ -1241,15 +1507,25 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
             mPlaybackPresenter.onControlsShown(true);
         }
 
+        // Silky Apple TV Cinema entrance glide for Top Header + Liquid Glass Capsule
+        if (getView() != null && !isSuggestionsShown()) {
+            View topHeader = getView().findViewById(R.id.cinema_player_top_header);
+            if (topHeader != null && topHeader.getParent() != null) {
+                try {
+                    java.lang.reflect.Method anim = topHeader.getParent().getClass().getMethod("animateHudEntrance");
+                    anim.invoke(topHeader.getParent());
+                } catch (Exception ignored) {}
+            }
+        }
+
         mIsControlsShownPreviously = true;
     }
 
     @Override
     public void hideControlsOverlay(boolean runAnimation) {
-        super.hideControlsOverlay(mIsUIAnimationsEnabled);
-
         // Do throttle. Called so many times. Rely on boxing because initial state is unknown.
         if (mIsControlsShownPreviously != null && !mIsControlsShownPreviously) {
+            super.hideControlsOverlay(false);
             return;
         }
 
@@ -1262,6 +1538,28 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
         }
 
         mIsControlsShownPreviously = false;
+
+        // Silky Apple tvOS HUD exit glide (fixes 0ms snap when mIsUIAnimationsEnabled is false)
+        if (runAnimation && getView() != null && !isSuggestionsShown()) {
+            View topHeader = getView().findViewById(R.id.cinema_player_top_header);
+            if (topHeader != null && topHeader.getParent() != null) {
+                try {
+                    java.lang.reflect.Method anim = topHeader.getParent().getClass()
+                            .getMethod("animateHudExit", Runnable.class);
+                    Runnable finishHide = () -> {
+                        if (isAdded() && (mIsControlsShownPreviously == null || !mIsControlsShownPreviously)) {
+                            super.hideControlsOverlay(false);
+                            setPlayerRowIndex(0);
+                        }
+                    };
+                    anim.invoke(topHeader.getParent(), finishHide);
+                    return;
+                } catch (Exception ignored) {}
+            }
+        }
+
+        super.hideControlsOverlay(mIsUIAnimationsEnabled);
+        setPlayerRowIndex(0);
     }
 
     /**
@@ -1302,9 +1600,10 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
             return;
         }
 
-        showOverlay(show);
-
         setPlayerRowIndex(0);
+        showOverlay(show);
+        setPlayerRowIndex(0);
+        updatePlayerBackground();
     }
 
     @Override
@@ -1597,6 +1896,7 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
      */
     @Override
     public void resetPlayerState() {
+        hideSponsorSkipPopup();
         mExoPlayerController.resetPlayerState();
         // Hide last frame of the previous video
         showBackgroundColor(R.color.player_background);

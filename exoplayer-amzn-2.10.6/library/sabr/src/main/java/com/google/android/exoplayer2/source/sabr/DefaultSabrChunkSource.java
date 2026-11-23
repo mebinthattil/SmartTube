@@ -127,6 +127,8 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
     private final Map<String, String> sabrHeaders;
     private int nexChunkIdx = -1;
     private long pendingSeekTimeUs = C.TIME_UNSET;
+    private int lastSelectedTrackIndex = -1;
+    private long pendingTrackSwitchSeekUs = C.TIME_UNSET;
 
     /**
      * @param manifestLoaderErrorThrower Throws errors affecting loading of manifests.
@@ -324,8 +326,21 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
         trackSelection.updateSelectedTrack(
                 playbackPositionUs, bufferedDurationUs, timeToLiveEdgeUs, queue, chunkIterators);
 
+        int currentTrackIndex = trackSelection.getSelectedIndex();
+        if (lastSelectedTrackIndex != -1 && currentTrackIndex != lastSelectedTrackIndex) {
+            this.formatSelector = createFormatSelector(trackType, trackSelection);
+            if (sabrStream != null) {
+                sabrStream.setFormatSelector(formatSelector);
+            }
+            pendingTrackSwitchSeekUs = loadPositionUs;
+            Log.d(TAG, "Seamless next-chunk SABR quality switch: trackIdx "
+                    + lastSelectedTrackIndex + " -> " + currentTrackIndex
+                    + " (" + trackSelection.getSelectedFormat() + ") at loadPosMs=" + (loadPositionUs / 1_000));
+        }
+        lastSelectedTrackIndex = currentTrackIndex;
+
         RepresentationHolder representationHolder =
-                representationHolders[trackSelection.getSelectedIndex()];
+                representationHolders[currentTrackIndex];
 
         // External captions contain the entire subtitle track in one sample.
         if (representationHolder.extractorWrapper == null && previous != null) {
@@ -421,6 +436,12 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
         //}
 
         long seekTimeUs = queue.isEmpty() ? loadPositionUs : C.TIME_UNSET;
+        if (pendingTrackSwitchSeekUs != C.TIME_UNSET) {
+            // Next-buffer quality switch: ask SABR for the upgraded track starting cleanly at the
+            // end of the already-buffered fast-start buffer (loadPositionUs) with ZERO buffer flush.
+            seekTimeUs = loadPositionUs;
+            pendingTrackSwitchSeekUs = C.TIME_UNSET;
+        }
         if (sabrStream != null) {
             if (seekTimeUs != C.TIME_UNSET) {
                 pendingSeekTimeUs = seekTimeUs;

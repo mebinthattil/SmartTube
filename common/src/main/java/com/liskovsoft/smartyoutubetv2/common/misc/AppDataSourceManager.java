@@ -4,6 +4,9 @@ import android.content.Context;
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.smartyoutubetv2.common.R;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.SettingsItem;
+import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem;
+import com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter;
+import com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.AboutSettingsPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.AboutSimpleSettingsPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.AccountSettingsPresenter;
@@ -19,6 +22,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.RemoteContr
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.SearchSettingsPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.SubtitleSettingsPresenter;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.FormatItem.VideoPreset;
+import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 
 import java.util.ArrayList;
@@ -40,33 +44,43 @@ public class AppDataSourceManager {
 
     public List<SettingsItem> getSettingItems(Context context) {
         List<SettingsItem> settingItems = new ArrayList<>();
+        boolean devMode = GeneralData.instance(context).isDeveloperModeEnabled();
 
+        // Everyday family-friendly settings (always visible)
         settingItems.add(new SettingsItem(
                 context.getString(R.string.settings_accounts), () -> AccountSettingsPresenter.instance(context).show(), R.drawable.settings_account));
         settingItems.add(new SettingsItem(
-                context.getString(R.string.settings_remote_control), () -> RemoteControlSettingsPresenter.instance(context).show(), R.drawable.settings_cast));
-        settingItems.add(new SettingsItem(
                 context.getString(R.string.settings_language_country), () -> LanguageSettingsPresenter.instance(context).show(), R.drawable.settings_language));
-        settingItems.add(new SettingsItem(
-                context.getString(R.string.settings_general), () -> GeneralSettingsPresenter.instance(context).show(), R.drawable.settings_app));
-        settingItems.add(new SettingsItem(
-                context.getString(R.string.settings_main_ui), () -> MainUISettingsPresenter.instance(context).show(), R.drawable.settings_main_ui));
-        settingItems.add(new SettingsItem(
-                context.getString(R.string.settings_player), () -> PlayerSettingsPresenter.instance(context).show(), R.drawable.settings_player));
-        // Don't add afr support check here.
-        // Users want even fake afr settings.
-        settingItems.add(new SettingsItem(
-                context.getString(R.string.auto_frame_rate), () -> AutoFrameRateSettingsPresenter.instance(context).show(), R.drawable.settings_afr));
         settingItems.add(new SettingsItem(
                 context.getString(R.string.subtitle_category_title), () -> SubtitleSettingsPresenter.instance(context).show(), R.drawable.settings_subtitles));
         settingItems.add(new SettingsItem(
-                context.getString(R.string.settings_search), () -> SearchSettingsPresenter.instance(context).show(), R.drawable.settings_search));
-        settingItems.add(new SettingsItem(
                 context.getString(R.string.content_block_provider), () -> SponsorBlockSettingsPresenter.instance(context).show(), R.drawable.settings_block));
+
+        // Power-user fine-grained settings (unlocked when Developer Mode is ON)
+        if (devMode) {
+            settingItems.add(new SettingsItem(
+                    context.getString(R.string.settings_general), () -> GeneralSettingsPresenter.instance(context).show(), R.drawable.settings_app));
+            settingItems.add(new SettingsItem(
+                    context.getString(R.string.settings_main_ui), () -> MainUISettingsPresenter.instance(context).show(), R.drawable.settings_main_ui));
+            settingItems.add(new SettingsItem(
+                    context.getString(R.string.settings_player), () -> PlayerSettingsPresenter.instance(context).show(), R.drawable.settings_player));
+            settingItems.add(new SettingsItem(
+                    context.getString(R.string.auto_frame_rate), () -> AutoFrameRateSettingsPresenter.instance(context).show(), R.drawable.settings_afr));
+            settingItems.add(new SettingsItem(
+                    context.getString(R.string.settings_remote_control), () -> RemoteControlSettingsPresenter.instance(context).show(), R.drawable.settings_cast));
+            settingItems.add(new SettingsItem(
+                    context.getString(R.string.settings_search), () -> SearchSettingsPresenter.instance(context).show(), R.drawable.settings_search));
+            settingItems.add(new SettingsItem(
+                    context.getString(R.string.dearrow_provider), () -> DeArrowSettingsPresenter.instance(context).show(), R.drawable.settings_dearrow));
+            settingItems.add(new SettingsItem(
+                    context.getString(R.string.app_backup_restore), () -> BackupSettingsPresenter.instance(context).show(), R.drawable.settings_backup));
+        }
+
+        // Developer Mode toggle (unlocks fine-grained quality codecs, presets, buffer & advanced settings)
         settingItems.add(new SettingsItem(
-                context.getString(R.string.dearrow_provider), () -> DeArrowSettingsPresenter.instance(context).show(), R.drawable.settings_dearrow));
-        settingItems.add(new SettingsItem(
-                context.getString(R.string.app_backup_restore), () -> BackupSettingsPresenter.instance(context).show(), R.drawable.settings_backup));
+                devMode ? "Developer Mode (ON)" : "Developer Mode",
+                () -> showDeveloperModeDialog(context),
+                R.drawable.settings_developer));
 
         if (Helpers.equalsAny(context.getPackageName(), Utils.KNOWN_PACKAGES)) {
             settingItems.add(new SettingsItem(
@@ -77,6 +91,35 @@ public class AppDataSourceManager {
         }
 
         return settingItems;
+    }
+
+    private void showDeveloperModeDialog(Context context) {
+        GeneralData generalData = GeneralData.instance(context);
+        AppDialogPresenter dialog = AppDialogPresenter.instance(context);
+        boolean devMode = generalData.isDeveloperModeEnabled();
+
+        List<com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.OptionItem> options = new ArrayList<>();
+        options.add(UiOptionItem.from(
+                "Simple Mode (Recommended) — Clean YouTube quality & family settings",
+                option -> {
+                    generalData.setDeveloperModeEnabled(false);
+                    dialog.closeDialog();
+                    BrowsePresenter.instance(context).refresh();
+                },
+                !devMode
+        ));
+        options.add(UiOptionItem.from(
+                "Developer Mode — Fine-grained codecs, presets, buffer & all settings",
+                option -> {
+                    generalData.setDeveloperModeEnabled(true);
+                    dialog.closeDialog();
+                    BrowsePresenter.instance(context).refresh();
+                },
+                devMode
+        ));
+
+        dialog.appendRadioCategory("Developer Mode", options);
+        dialog.showDialog("Developer Mode");
     }
 
     public VideoPreset[] getVideoPresets() {

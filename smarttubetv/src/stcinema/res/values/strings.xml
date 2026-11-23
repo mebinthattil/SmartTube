@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">YouTube</string>
+    <string name="cinema_ad_free">AD-FREE</string>
+    <string name="cinema_sponsorblock">SponsorBlock</string>
+    <string name="cinema_preview_playing">LIVE PREVIEW</string>
+    <string name="cinema_press_ok_play">Press OK to Play</string>
+    <string name="cinema_sign_in">Sign In</string>
+    <string name="cinema_guest">Guest</string>
+    <string name="cinema_now_playing">Now Playing</string>
+    <string name="cinema_search">Search</string>
+    <string name="cinema_live">LIVE</string>
+    <string name="cinema_upcoming">UPCOMING</string>
+</resources>

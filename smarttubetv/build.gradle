@@ -177,6 +177,16 @@ android {
                 abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86'
             }
         }
+        stcinema {
+            applicationId "app.smarttube.cinema"
+            minSdkVersion 21
+            targetSdkVersion project.properties.compileSdkVersion
+            matchingFallbacks = ['stfdroid']
+
+            ndk {
+                abiFilters 'armeabi-v7a', 'arm64-v8a'
+            }
+        }
     }
 }
 

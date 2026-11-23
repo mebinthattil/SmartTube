@@ -734,7 +734,7 @@ public class PlayerUIController extends BasePlayerController {
         if (KeyHelpers.isConfirmKey(keyCode) && !controlsShown) {
             switch (getPlayerData().getOKButtonBehavior()) {
                 case PlayerData.OK_ONLY_UI:
-                    getPlayer().showOverlay(true);
+                    getPlayer().showControls(true);
                     return true; // don't show ui
                 case PlayerData.OK_UI_AND_PAUSE:
                     // NOP
@@ -830,13 +830,18 @@ public class PlayerUIController extends BasePlayerController {
 
     private boolean handleUpSkip(int keyCode) {
         if (getPlayer() == null || getPlayer().isOverlayShown() || getVideo() == null
-                || getVideo().belongsToShortsGroup() || !getPlayerTweaksData().isQuickSkipChaptersEnabled()) {
+                || getVideo().belongsToShortsGroup()) {
             return false;
         }
 
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-            getController(SuggestionsController.class).onNextChapter();
-            return true; // hide ui
+            if (getPlayerTweaksData().isQuickSkipChaptersEnabled()) {
+                getController(SuggestionsController.class).onNextChapter();
+                return true; // hide ui
+            }
+            // Apple TV ergonomics: pressing UP while watching fullscreen video cleanly reveals the Player HUD
+            getPlayer().showControls(true);
+            return true;
         }
 
         return false;

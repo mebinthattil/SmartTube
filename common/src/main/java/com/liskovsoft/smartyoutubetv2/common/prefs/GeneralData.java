@@ -392,6 +392,19 @@ public class GeneralData implements ProfileChangeListener {
         persistState();
     }
 
+    /**
+     * Developer Mode (OFF by default): keeps Video Quality and Settings simple & family-friendly
+     * like classic YouTube. Turning ON unlocks all fine-grained SmartTube codecs, buffer, network,
+     * presets, Stats for Nerds, and advanced settings everywhere.
+     */
+    public boolean isDeveloperModeEnabled() {
+        return "1".equals(mPrefs.getData("cinema_developer_mode"));
+    }
+
+    public void setDeveloperModeEnabled(boolean enable) {
+        mPrefs.setData("cinema_developer_mode", enable ? "1" : "0");
+    }
+
     public int getHistoryState() {
         return mHistoryState;
     }

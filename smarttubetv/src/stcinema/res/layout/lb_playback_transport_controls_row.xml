@@ -1,0 +1,537 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Apple tvOS Cinema Fullscreen Player HUD (Refined Typography, Single Tech Badge, Transport|Utility Divider) -->
+<com.liskovsoft.smartyoutubetv2.tv.ui.cinema.CinemaPlayerOverlayView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+    <!-- Subtle Top & Bottom Cinema Edge Scrims (Middle 60% remains crystal-clear video) -->
+    <View
+        android:id="@+id/cinema_player_scrim_top"
+        android:layout_width="match_parent"
+        android:layout_height="170dp"
+        android:layout_gravity="top"
+        android:background="@drawable/bg_cinema_player_scrim_top" />
+
+    <View
+        android:id="@+id/cinema_player_scrim_bottom"
+        android:layout_width="match_parent"
+        android:layout_height="220dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/bg_cinema_player_scrim_bottom" />
+
+    <!-- =================================================================== -->
+    <!-- TOP HEADER: Channel + Title (Left) & Calm Technical Pill (Right)    -->
+    <!-- =================================================================== -->
+    <LinearLayout
+        android:id="@+id/cinema_player_top_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:orientation="horizontal"
+        android:gravity="top"
+        android:paddingStart="44dp"
+        android:paddingEnd="44dp"
+        android:paddingTop="28dp">
+
+        <!-- Top-Left Metadata -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="24dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/cinema_hud_eyebrow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.10"
+                android:singleLine="true"
+                android:textColor="#CCFFFFFF"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/cinema_hud_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif"
+                android:letterSpacing="-0.02"
+                android:lineSpacingMultiplier="1.08"
+                android:maxLines="2"
+                android:shadowColor="#99000000"
+                android:shadowDx="0"
+                android:shadowDy="2"
+                android:shadowRadius="8"
+                android:textColor="@color/cinema_text_primary"
+                android:textSize="21sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Top-Right Quiet Technical Pill(s): Merged Resolution·FPS (+ Speed ONLY when != 1.0x) -->
+        <LinearLayout
+            android:id="@+id/additional_info"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:focusable="false">
+
+            <TextView
+                android:id="@+id/cinema_pill_quality"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:visibility="gone"
+                android:background="@drawable/bg_cinema_hud_status_pill"
+                android:fontFamily="sans-serif-medium"
+                android:fontFeatureSettings="tnum"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:paddingTop="5dp"
+                android:paddingBottom="5dp"
+                android:textColor="@color/cinema_text_primary"
+                android:textSize="11.5sp" />
+
+            <!-- Kept GONE (merged cleanly into cinema_pill_quality) -->
+            <TextView
+                android:id="@+id/cinema_pill_fps"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
+
+            <!-- Only visible when playback speed != 1.0x -->
+            <TextView
+                android:id="@+id/cinema_pill_speed"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:visibility="gone"
+                android:background="@drawable/bg_cinema_hud_status_pill"
+                android:fontFamily="sans-serif-medium"
+                android:fontFeatureSettings="tnum"
+                android:paddingStart="11dp"
+                android:paddingEnd="11dp"
+                android:paddingTop="5dp"
+                android:paddingBottom="5dp"
+                android:textColor="@color/cinema_text_primary"
+                android:textSize="11.5sp" />
+
+            <!-- Kept GONE for Apple minimalism (SponsorBlock shown via timeline colors & 5s popup) -->
+            <TextView
+                android:id="@+id/cinema_pill_sb"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
+
+            <!-- Hidden bridge views kept for PlaybackTransportRowPresenter compatibility -->
+            <TextView
+                android:id="@+id/quality_info"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
+
+            <com.liskovsoft.smartyoutubetv2.tv.ui.widgets.time.DateTimeView
+                android:id="@+id/date_time"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Hidden legacy description card required by PlaybackTransportRowPresenter -->
+    <LinearLayout
+        android:id="@+id/controls_card"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone">
+        <ImageView
+            android:id="@+id/image"
+            android:layout_width="0dp"
+            android:layout_height="0dp" />
+        <FrameLayout
+            android:id="@+id/description_dock"
+            android:layout_width="0dp"
+            android:layout_height="0dp" />
+    </LinearLayout>
+
+    <!-- STORYBOARD SEEK PREVIEW THUMBNAILS -->
+    <LinearLayout
+        android:id="@+id/thumbs_row_wrapper"
+        android:visibility="invisible"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginBottom="132dp"
+        android:orientation="vertical">
+
+        <com.liskovsoft.smartyoutubetv2.tv.ui.mod.leanback.playerglue.seekpreview.ThumbsBar
+            android:id="@+id/thumbs_row"
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/thumbs_row_title"
+            android:visibility="gone"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:layout_gravity="center_horizontal"
+            android:fontFamily="sans-serif-medium"
+            android:textColor="@color/cinema_text_primary"
+            android:textSize="12.5sp" />
+    </LinearLayout>
+
+    <!-- =================================================================== -->
+    <!-- BOTTOM FLOATING CONCENTRIC GLASS CAPSULE (26dp corners)             -->
+    <!-- =================================================================== -->
+    <com.liskovsoft.smartyoutubetv2.tv.ui.mod.leanback.playerglue.tweaks.PlaybackTransportRowView
+        android:id="@+id/transport_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginStart="42dp"
+        android:layout_marginEnd="42dp"
+        android:layout_marginBottom="24dp"
+        android:background="@drawable/bg_cinema_player_glass"
+        android:orientation="vertical"
+        android:paddingStart="22dp"
+        android:paddingEnd="22dp"
+        android:paddingTop="14dp"
+        android:paddingBottom="16dp"
+        android:clipChildren="false"
+        android:clipToPadding="false">
+
+        <!-- Child 0: Top Focus Edge (Press UP from Scrub Bar dismisses HUD) -->
+        <LinearLayout
+            android:id="@+id/top_edge"
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:focusable="true"
+            android:layout_height="1dp" />
+
+        <!-- Child 1: SCRUB BAR ROW [08:09]  =========o=========  [24:18] (Tabular Numerals + Stable Anchor) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:layoutDirection="ltr"
+            android:orientation="horizontal"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            tools:ignore="RtlHardcoded">
+
+            <TextView
+                android:id="@+id/current_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="44dp"
+                android:gravity="end"
+                android:layout_marginEnd="8dp"
+                android:fontFamily="sans-serif-medium"
+                android:fontFeatureSettings="tnum"
+                android:textColor="#F0FFFFFF"
+                android:textSize="13sp" />
+
+            <com.liskovsoft.smartyoutubetv2.tv.ui.mod.leanback.misc.SeekBar
+                android:id="@+id/playback_progress"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/lb_playback_transport_progressbar_height"
+                android:layout_weight="1"
+                android:focusable="true"
+                android:focusableInTouchMode="true" />
+
+            <LinearLayout
+                android:id="@+id/time_info"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:focusable="false">
+
+                <LinearLayout
+                    android:id="@+id/current_time_wrapper"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/separate_time"
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:visibility="gone"
+                        android:text="@string/lb_playback_time_separator" />
+
+                    <TextView
+                        android:id="@+id/total_time"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:minWidth="44dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:fontFeatureSettings="tnum"
+                        android:textColor="#B8FFFFFF"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/ending_time"
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Child 2: TRANSPORT | UTILITY PILL CONTROLS ROW -->
+        <com.liskovsoft.smartyoutubetv2.tv.ui.cinema.CinemaPillRowLayout
+            android:id="@+id/cinema_pill_controls_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center_vertical"
+            android:layoutDirection="ltr"
+            android:orientation="horizontal"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            tools:ignore="RtlHardcoded">
+
+            <!-- Primary Transport Pill 1: -10s -->
+            <LinearLayout
+                android:id="@+id/cinema_btn_rewind"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_cinema_hud_ctrl_pill"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="13dp"
+                android:paddingEnd="14dp">
+
+                <ImageView
+                    android:id="@+id/cinema_icon_rewind"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:src="@drawable/ic_cinema_rewind" />
+
+                <TextView
+                    android:id="@+id/cinema_label_rewind"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:fontFeatureSettings="tnum"
+                    android:text="-10s"
+                    android:textColor="@color/cinema_text_primary"
+                    android:textSize="12.5sp" />
+            </LinearLayout>
+
+            <!-- Primary Transport Pill 2: Pause / Play -->
+            <LinearLayout
+                android:id="@+id/cinema_btn_play_pause"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_cinema_hud_ctrl_pill"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="14dp"
+                android:paddingEnd="15dp">
+
+                <ImageView
+                    android:id="@+id/cinema_icon_play_pause"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:src="@drawable/ic_cinema_pause" />
+
+                <TextView
+                    android:id="@+id/cinema_label_play_pause"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="Pause"
+                    android:textColor="@color/cinema_text_primary"
+                    android:textSize="12.5sp" />
+            </LinearLayout>
+
+            <!-- Primary Transport Pill 3: +10s -->
+            <LinearLayout
+                android:id="@+id/cinema_btn_forward"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:background="@drawable/bg_cinema_hud_ctrl_pill"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="13dp"
+                android:paddingEnd="14dp">
+
+                <ImageView
+                    android:id="@+id/cinema_icon_forward"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:src="@drawable/ic_cinema_forward" />
+
+                <TextView
+                    android:id="@+id/cinema_label_forward"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:fontFeatureSettings="tnum"
+                    android:text="+10s"
+                    android:textColor="@color/cinema_text_primary"
+                    android:textSize="12.5sp" />
+            </LinearLayout>
+
+            <!-- Subtle Apple tvOS Transport | Utility Hairline Divider -->
+            <View
+                android:layout_width="1dp"
+                android:layout_height="16dp"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:background="#29FFFFFF" />
+
+            <!-- Utility Pill 4: Up Next -->
+            <LinearLayout
+                android:id="@+id/cinema_btn_upnext"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_cinema_hud_util_pill"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="13dp"
+                android:paddingEnd="14dp">
+
+                <ImageView
+                    android:id="@+id/cinema_icon_upnext"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:src="@drawable/ic_cinema_chapters" />
+
+                <TextView
+                    android:id="@+id/cinema_label_upnext"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="Up Next"
+                    android:textColor="@color/cinema_text_primary"
+                    android:textSize="12.5sp" />
+            </LinearLayout>
+
+            <!-- Utility Pill 5: Captions -->
+            <LinearLayout
+                android:id="@+id/cinema_btn_captions"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_cinema_hud_util_pill"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="13dp"
+                android:paddingEnd="14dp">
+
+                <ImageView
+                    android:id="@+id/cinema_icon_captions"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:src="@drawable/ic_cinema_captions" />
+
+                <TextView
+                    android:id="@+id/cinema_label_captions"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="Captions"
+                    android:textColor="@color/cinema_text_primary"
+                    android:textSize="12.5sp" />
+            </LinearLayout>
+
+            <!-- Utility Pill 6: Quality (Distinct SF-Symbol Sliders Icon) -->
+            <LinearLayout
+                android:id="@+id/cinema_btn_quality"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_cinema_hud_util_pill"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="13dp"
+                android:paddingEnd="14dp">
+
+                <ImageView
+                    android:id="@+id/cinema_icon_quality"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:src="@drawable/ic_cinema_sliders" />
+
+                <TextView
+                    android:id="@+id/cinema_label_quality"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="Quality"
+                    android:textColor="@color/cinema_text_primary"
+                    android:textSize="12.5sp" />
+            </LinearLayout>
+
+            <!-- Utility Pill 7: More -->
+            <LinearLayout
+                android:id="@+id/cinema_btn_more"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:background="@drawable/bg_cinema_hud_util_pill"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="12dp"
+                android:paddingEnd="14dp">
+
+                <ImageView
+                    android:id="@+id/cinema_icon_more"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:src="@drawable/ic_cinema_more" />
+
+                <TextView
+                    android:id="@+id/cinema_label_more"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="More"
+                    android:textColor="@color/cinema_text_primary"
+                    android:textSize="12.5sp" />
+            </LinearLayout>
+        </com.liskovsoft.smartyoutubetv2.tv.ui.cinema.CinemaPillRowLayout>
+
+        <!-- Hidden legacy docks retained strictly for PlaybackTransportRowPresenter non-null compatibility -->
+        <FrameLayout
+            android:id="@+id/controls_dock"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
+
+        <FrameLayout
+            android:id="@+id/secondary_controls_dock"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
+    </com.liskovsoft.smartyoutubetv2.tv.ui.mod.leanback.playerglue.tweaks.PlaybackTransportRowView>
+</com.liskovsoft.smartyoutubetv2.tv.ui.cinema.CinemaPlayerOverlayView>

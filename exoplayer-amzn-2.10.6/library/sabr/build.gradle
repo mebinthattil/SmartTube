@@ -66,7 +66,8 @@ dependencies {
 
 protobuf {
     protoc {
-        artifact = 'com.google.protobuf:protoc:' + protobufVersion
+        // 3.21.12 ships a genuine native osx-aarch_64 binary while emitting 3.x javalite-compatible sources
+        artifact = 'com.google.protobuf:protoc:3.21.12'
     }
 
     generateProtoTasks {

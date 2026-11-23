@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/cinema_card_root"
+    android:layout_width="210dp"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="8dp"
+    android:layout_marginEnd="8dp"
+    android:layout_marginBottom="10dp"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:focusable="true"
+    android:focusableInTouchMode="false"
+    android:orientation="vertical">
+
+    <!-- Glossy Borderless Cinema Thumbnail (16:9 standard, dynamically 9:14 portrait for Shorts) -->
+    <FrameLayout
+        android:id="@+id/cinema_thumb_frame"
+        android:layout_width="match_parent"
+        android:layout_height="118dp"
+        android:background="@color/cinema_card_bg">
+
+        <ImageView
+            android:id="@+id/cinema_card_thumb"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop" />
+
+        <!-- Duration / Live Badge (11sp Medium + tabular numerals) -->
+        <TextView
+            android:id="@+id/cinema_card_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_marginEnd="7dp"
+            android:layout_marginBottom="7dp"
+            android:background="@drawable/bg_cinema_duration_pill"
+            android:fontFamily="sans-serif-medium"
+            android:fontFeatureSettings="tnum"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:textColor="@color/cinema_text_primary"
+            android:textSize="11sp"
+            android:visibility="gone" />
+
+        <!-- Watched Progress Bar -->
+        <ProgressBar
+            android:id="@+id/cinema_card_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:layout_gravity="bottom"
+            android:max="100"
+            android:progressTint="#FFFFFFFF"
+            android:progressBackgroundTint="#40FFFFFF"
+            android:visibility="gone" />
+
+        <!-- Crisp 2dp Apple tvOS Focus Ring Overlay -->
+        <View
+            android:id="@+id/cinema_card_focus_ring"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_cinema_card_focus_ring"
+            android:alpha="0" />
+    </FrameLayout>
+
+    <!-- Apple tvOS Weight Ladder: 12.5sp Medium Title + 11.5sp Regular Subtitle -->
+    <TextView
+        android:id="@+id/cinema_card_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginStart="2dp"
+        android:layout_marginEnd="2dp"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium"
+        android:maxLines="1"
+        android:textColor="@color/cinema_text_secondary"
+        android:textSize="12.5sp" />
+
+    <TextView
+        android:id="@+id/cinema_card_sub"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:layout_marginStart="2dp"
+        android:layout_marginEnd="2dp"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif"
+        android:maxLines="1"
+        android:textColor="@color/cinema_text_muted"
+        android:textSize="11.5sp" />
+</LinearLayout>

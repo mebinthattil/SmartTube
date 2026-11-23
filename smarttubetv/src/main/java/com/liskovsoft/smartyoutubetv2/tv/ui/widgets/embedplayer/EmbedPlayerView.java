@@ -6,7 +6,10 @@ import android.util.AttributeSet;
 import androidx.annotation.Nullable;
 
 import com.google.android.exoplayer2.DefaultRenderersFactory;
+import com.google.android.exoplayer2.ExoPlaybackException;
+import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.SimpleExoPlayer;
+import com.google.android.exoplayer2.video.VideoListener;
 import com.google.android.exoplayer2.trackselection.AdaptiveTrackSelection;
 import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
 import com.google.android.exoplayer2.ui.AspectRatioFrameLayout;
@@ -25,6 +28,7 @@ import com.liskovsoft.smartyoutubetv2.common.exoplayer.other.ExoPlayerInitialize
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.FormatItem;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.versions.renderer.CustomOverridesRenderersFactory;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.versions.selector.RestoreTrackSelector;
+import com.liskovsoft.smartyoutubetv2.common.exoplayer.versions.selector.StagedUpgradeTrackSelection;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 
 import java.io.InputStream;
@@ -47,6 +51,35 @@ public class EmbedPlayerView extends PlayerView implements PlaybackView {
     private final Runnable mStopPlayback = this::finish;
     private int mQuality;
     private float mPercentWatched;
+    private boolean mUseSmoothFade;
+    private long mMaxPreviewDurationMs = 5 * 60 * 1_000;
+    private boolean mSkipWatchSync;
+    private OnPreviewStateListener mPreviewListener;
+    private boolean mFirstFrameShown;
+    private VideoListener mPreviewVideoListener;
+    private Player.EventListener mPreviewPlayerEventListener;
+
+    public interface OnPreviewStateListener {
+        void onFirstFrameRendered();
+        void onPreviewError();
+        void onPreviewStopped();
+    }
+
+    public void setPreviewStateListener(@Nullable OnPreviewStateListener listener) {
+        mPreviewListener = listener;
+    }
+
+    public void setSmoothFade(boolean smoothFade) {
+        mUseSmoothFade = smoothFade;
+    }
+
+    public void setMaxMuteDurationMs(long durationMs) {
+        mMaxPreviewDurationMs = durationMs;
+    }
+
+    public void setSkipWatchSync(boolean skip) {
+        mSkipWatchSync = skip;
+    }
 
     public EmbedPlayerView(Context context) {
         super(context);
@@ -64,11 +97,18 @@ public class EmbedPlayerView extends PlayerView implements PlaybackView {
     }
 
     private void hideView() {
-        setAlpha(0);
+        animate().cancel();
+        setAlpha(0f);
+        mFirstFrameShown = false;
     }
 
     private void showView() {
-        setAlpha(1);
+        if (mUseSmoothFade) {
+            animate().cancel();
+            animate().alpha(1f).setDuration(420).start();
+        } else {
+            setAlpha(1f);
+        }
     }
 
     @Override
@@ -517,9 +557,17 @@ public class EmbedPlayerView extends PlayerView implements PlaybackView {
         // Fix Android TV 12 playing on Home (top view check)
         PlaybackView view = mPlaybackPresenter.getView();
         if (view == null || view instanceof EmbedPlayerView || (!mPlaybackPresenter.isEngineInitialized() && getViewManager().getTopView() != PlaybackView.class)) {
-            initPlayer();
-            createPlayerObjects();
-            mPlaybackPresenter.onNewVideo(video);
+            if (!isEngineInitialized()) {
+                initPlayer();
+                // Queue target video BEFORE createPlayerObjects()->onEngineInitialized() so
+                // VideoLoaderController loads the preview stream ONCE instead of double-loading!
+                mPlaybackPresenter.onNewVideo(video);
+                createPlayerObjects();
+            } else {
+                initPlayer();
+                createPlayerObjects();
+                mPlaybackPresenter.onNewVideo(video);
+            }
             mPercentWatched = video.percentWatched;
         }
     }
@@ -545,19 +593,53 @@ public class EmbedPlayerView extends PlayerView implements PlaybackView {
             return;
         }
 
-        // Use default or pass your bandwidthMeter here: bandwidthMeter = new DefaultBandwidthMeter.Builder(getContext()).build()
-        DefaultTrackSelector trackSelector = new RestoreTrackSelector(new AdaptiveTrackSelection.Factory());
+        // Staged two-tier track selection: starts Hero preview rapidly on 720p (same codec as user's
+        // saved 1080p/4K target), caps preview ahead-buffer to 5.5s, and seamlessly upgrades to full
+        // quality on the VERY NEXT buffer chunk upon handoff with ZERO buffer flush or spinner!
+        StagedUpgradeTrackSelection.Factory stagedFactory = new StagedUpgradeTrackSelection.Factory();
+        DefaultTrackSelector trackSelector = new RestoreTrackSelector(stagedFactory);
         mExoPlayerController.setTrackSelector(trackSelector);
+        mExoPlayerController.setStagedTrackFactory(stagedFactory);
+        mExoPlayerController.setStagedFastStartEnabled(mQuality != QUALITY_LOW);
 
+        mPlayerInitializer.setPreviewBufferCapMs(5_500L);
         DefaultRenderersFactory renderersFactory = new CustomOverridesRenderersFactory(getContext());
         mPlayer = mPlayerInitializer.createPlayer(getContext(), renderersFactory, trackSelector);
         mPlayer.setPlayWhenReady(true);
         //mPlayer.setRepeatMode(Player.REPEAT_MODE_ONE);
 
+        mPreviewVideoListener = new VideoListener() {
+            @Override
+            public void onRenderedFirstFrame() {
+                if (!mFirstFrameShown) {
+                    mFirstFrameShown = true;
+                    Utils.removeCallbacks(mShowView);
+                    showView();
+                    if (mPreviewListener != null) {
+                        mPreviewListener.onFirstFrameRendered();
+                    }
+                }
+            }
+        };
+        mPlayer.addVideoListener(mPreviewVideoListener);
+
+        mPreviewPlayerEventListener = new Player.EventListener() {
+            @Override
+            public void onPlayerError(ExoPlaybackException error) {
+                hideView();
+                if (mPreviewListener != null) {
+                    mPreviewListener.onPreviewError();
+                }
+            }
+        };
+        mPlayer.addListener(mPreviewPlayerEventListener);
+
         mExoPlayerController.setPlayer(mPlayer);
-        mExoPlayerController.selectFormat(mQuality == QUALITY_LOW ? FormatItem.VIDEO_SUB_SD_AVC_30 : FormatItem.VIDEO_SD_AVC_30);
-        // Don't use subs! Not efficient. High cpu load. Cause input lags.
-        mExoPlayerController.selectFormat(FormatItem.SUBTITLE_NONE);
+        if (mQuality == QUALITY_LOW) {
+            mExoPlayerController.selectFormatTransient(FormatItem.VIDEO_SUB_SD_AVC_30);
+        }
+        // Don't use subs during preview! Not efficient. High cpu load. Cause input lags.
+        mExoPlayerController.selectFormatTransient(FormatItem.SUBTITLE_NONE);
         if (mIsMute) {
             mExoPlayerController.setVolume(0);
         }
@@ -565,6 +647,68 @@ public class EmbedPlayerView extends PlayerView implements PlaybackView {
         setPlayer(mPlayer);
 
         mPlaybackPresenter.onEngineInitialized(); // start playback
+    }
+
+    public boolean canHandoff(@Nullable Video video) {
+        return video != null
+                && mVideo != null
+                && video.videoId != null
+                && video.videoId.equals(mVideo.videoId)
+                && mPlayer != null
+                && mExoPlayerController != null
+                && mPlayerInitializer != null
+                && mExoPlayerController.containsMedia();
+    }
+
+    /**
+     * Detaches the live ExoPlayer without stopping or releasing it, placing it in
+     * {@link PreviewPlayerHandoff} so PlaybackFragment resumes immediately at the
+     * exact frame and smoothly upgrades to full quality on the next DASH segment.
+     */
+    public boolean detachForHandoff() {
+        if (!isEngineInitialized() || mVideo == null || mVideo.videoId == null
+                || mExoPlayerController == null || mPlayerInitializer == null
+                || !mExoPlayerController.containsMedia()) {
+            return false;
+        }
+        Utils.removeCallbacks(mShowView);
+        Utils.removeCallbacks(mStopPlayback);
+
+        if (mPreviewVideoListener != null) {
+            mPlayer.removeVideoListener(mPreviewVideoListener);
+            mPreviewVideoListener = null;
+        }
+        if (mPreviewPlayerEventListener != null) {
+            mPlayer.removeListener(mPreviewPlayerEventListener);
+            mPreviewPlayerEventListener = null;
+        }
+
+        mExoPlayerController.setOnVideoLoaded(null);
+        mExoPlayerController.setVolume(1f);
+        // Freeze the media clock for the ~100ms Activity launch while keeping decoded buffers hot
+        // so audio never races ahead of video while PlaybackFragment's SurfaceView attaches!
+        mPlayer.setPlayWhenReady(false);
+        setPlayer(null); // detaches preview TextureView without stopping/flushing ExoPlayer
+
+        android.util.Log.d("CinemaHandoff", "Detaching live preview for handoff: videoId=" + mVideo.videoId
+                + " state=" + mPlayer.getPlaybackState()
+                + " posMs=" + mPlayer.getCurrentPosition()
+                + " bufMs=" + mPlayer.getBufferedPosition());
+
+        PreviewPlayerHandoff.store(new PreviewPlayerHandoff.Session(
+                mVideo.videoId,
+                mVideo,
+                mPlayer,
+                mExoPlayerController,
+                mPlayerInitializer
+        ));
+
+        // Transfer ownership so destroyPlayerObjects() / finish() becomes a safe no-op
+        mPlayer = null;
+        mExoPlayerController = null;
+        mPlayerInitializer = null;
+        hideView();
+        return true;
     }
 
     private void destroyPlayerObjects() {
@@ -583,11 +727,14 @@ public class EmbedPlayerView extends PlayerView implements PlaybackView {
             setPlayer(null);
             hideView();
             syncPositionIfNeeded();
+            if (mPreviewListener != null) {
+                mPreviewListener.onPreviewStopped();
+            }
         }
     }
 
     private void syncPositionIfNeeded() {
-        if (!mIsMute && isPositionChanged()) {
+        if (!mSkipWatchSync && !mIsMute && isPositionChanged()) {
             BasePresenter<?> presenter = getViewManager().getTopPresenter();
             if (presenter != null) {
                 presenter.syncItem(mVideo);
@@ -600,10 +747,12 @@ public class EmbedPlayerView extends PlayerView implements PlaybackView {
     }
 
     private void onVideoLoaded() {
-        // Fix the screen becomes black for a moment
-        Utils.postDelayed(mShowView, 1_000);
-        if (mIsMute) { // Save bandwidth if the previews are muted
-            Utils.postDelayed(mStopPlayback, 5 * 60 * 1_000);
+        // Fallback if onRenderedFirstFrame does not fire promptly on some devices
+        if (!mFirstFrameShown) {
+            Utils.postDelayed(mShowView, mUseSmoothFade ? 650 : 1_000);
+        }
+        if ((mIsMute || mSkipWatchSync) && mMaxPreviewDurationMs > 0) {
+            Utils.postDelayed(mStopPlayback, mMaxPreviewDurationMs);
         }
     }
 

@@ -546,7 +546,20 @@ public class VideoStateController extends BasePlayerController {
         Playlist.instance().sync(video);
     }
 
+    private boolean mSkipNextRestorePosition;
+
+    public void skipNextRestorePosition() {
+        mSkipNextRestorePosition = true;
+    }
+
     private void restorePosition() {
+        if (mSkipNextRestorePosition) {
+            mSkipNextRestorePosition = false;
+            if (getPlayer() != null && !mIsPlayBlocked) {
+                getPlayer().setPlayWhenReady(true);
+            }
+            return;
+        }
         Video item = getVideo();
 
         if (getPlayer() == null || item == null) {

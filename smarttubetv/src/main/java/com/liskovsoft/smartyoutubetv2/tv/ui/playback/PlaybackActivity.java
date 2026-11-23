@@ -58,6 +58,9 @@ public class PlaybackActivity extends LeanbackActivity {
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (mPlaybackFragment != null) {
+            if (mPlaybackFragment.consumeSponsorPopupKey(event)) {
+                return true;
+            }
             mPlaybackFragment.onDispatchKeyEvent(event);
         }
 

@@ -39,8 +39,8 @@ import java.util.List;
 import static androidx.annotation.RestrictTo.Scope.LIBRARY_GROUP;
 
 /**
- * Replacement of SeekBar, has two bar heights and two thumb size when focused/not_focused.
- * The widget does not deal with KeyEvent, it's client's responsibility to set a key listener.
+ * Apple TV Cinema enhanced SeekBar: smooth frosted pill track, glowing SponsorBlock segments,
+ * and always-visible luminous white scrubber orb.
  * @hide
  */
 @RestrictTo(LIBRARY_GROUP)
@@ -50,17 +50,8 @@ public final class SeekBar extends View {
      */
     @RestrictTo(LIBRARY_GROUP)
     public abstract static class AccessibilitySeekListener {
-        /**
-         * Called to perform AccessibilityNodeInfoCompat.ACTION_SCROLL_FORWARD
-         */
         public abstract boolean onAccessibilitySeekForward();
-        /**
-         * Called to perform AccessibilityNodeInfoCompat.ACTION_SCROLL_BACKWARD
-         */
         public abstract boolean onAccessibilitySeekBackward();
-        /**
-         * Touch event handling
-         */
         public abstract boolean onAccessibilitySeekProgress(int progress);
     }
 
@@ -76,15 +67,20 @@ public final class SeekBar extends View {
     private final Paint mProgressPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mBackgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mKnobPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mKnobGlowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private int mProgress;
     private int mSecondProgress;
     private int mMax;
-    private int mKnobx;
+    private float mKnobx;
 
     private int mActiveRadius;
     private int mBarHeight;
     private int mActiveBarHeight;
+    private float mDensity;
+    private float mFocusFraction = 0f;
+    private android.animation.ValueAnimator mFocusAnimator;
+    private List<SeekBarSegment> mPendingSegments;
     private final List<SeekBarRectangle> mSeekBarRectangles = new ArrayList<>();
 
     private AccessibilitySeekListener mAccessibilitySeekListener;
@@ -92,10 +88,13 @@ public final class SeekBar extends View {
     public SeekBar(Context context, AttributeSet attrs) {
         super(context, attrs);
         setWillNotDraw(false);
-        mBackgroundPaint.setColor(Color.GRAY);
-        mSecondProgressPaint.setColor(Color.LTGRAY);
-        mProgressPaint.setColor(Color.RED);
+        mDensity = context.getResources().getDisplayMetrics().density;
+        // Frosted Apple TV Liquid Glass track palette
+        mBackgroundPaint.setColor(0x38FFFFFF);
+        mSecondProgressPaint.setColor(0x45FFFFFF);
+        mProgressPaint.setColor(Color.WHITE);
         mKnobPaint.setColor(Color.WHITE);
+        mKnobGlowPaint.setColor(0x52FFFFFF);
         mBarHeight = context.getResources().getDimensionPixelSize(
                 R.dimen.lb_playback_transport_progressbar_bar_height);
         mActiveBarHeight = context.getResources().getDimensionPixelSize(
@@ -104,25 +103,16 @@ public final class SeekBar extends View {
                 R.dimen.lb_playback_transport_progressbar_active_radius);
     }
 
-    /**
-     * Set radius in pixels for thumb when SeekBar is focused.
-     */
     public void setActiveRadius(int radius) {
         mActiveRadius = radius;
         calculate();
     }
 
-    /**
-     * Set horizontal bar height in pixels when SeekBar is not focused.
-     */
     public void setBarHeight(int barHeight) {
         mBarHeight = barHeight;
         calculate();
     }
 
-    /**
-     * Set horizontal bar height in pixels when SeekBar is focused.
-     */
     public void setActiveBarHeight(int activeBarHeight) {
         mActiveBarHeight = activeBarHeight;
         calculate();
@@ -132,36 +122,68 @@ public final class SeekBar extends View {
     protected void onFocusChanged(boolean gainFocus,
             int direction, Rect previouslyFocusedRect) {
         super.onFocusChanged(gainFocus, direction, previouslyFocusedRect);
-        calculate();
-        //calculateSegments();
+        animateFocusFraction(gainFocus ? 1f : 0f);
+    }
+
+    private void animateFocusFraction(float target) {
+        if (mFocusAnimator != null) {
+            mFocusAnimator.cancel();
+        }
+        mFocusAnimator = android.animation.ValueAnimator.ofFloat(mFocusFraction, target);
+        mFocusAnimator.setDuration(160L);
+        mFocusAnimator.setInterpolator(androidx.core.view.animation.PathInterpolatorCompat.create(0.22f, 1.0f, 0.36f, 1.0f));
+        mFocusAnimator.addUpdateListener(anim -> {
+            mFocusFraction = (float) anim.getAnimatedValue();
+            calculate();
+        });
+        mFocusAnimator.start();
     }
 
     @Override
     protected void onSizeChanged(final int w, final int h, final int oldw, final int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
         calculate();
+        if (mPendingSegments != null) {
+            calculateSegments(mPendingSegments);
+        }
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        final int radius = isFocused() ? mActiveRadius : mBarHeight / 2;
-        canvas.drawRoundRect(mBackgroundRect, radius, radius, mBackgroundPaint);
+        final float barHeight = mBarHeight + (mActiveBarHeight - mBarHeight) * mFocusFraction;
+        final float barRadius = barHeight / 2f;
+
+        // 1. Frosted translucent track background
+        canvas.drawRoundRect(mBackgroundRect, barRadius, barRadius, mBackgroundPaint);
+
+        // 2. Buffered segment
         if (mSecondProgressRect.right > mSecondProgressRect.left) {
-            canvas.drawRoundRect(mSecondProgressRect, radius, radius, mSecondProgressPaint);
+            canvas.drawRoundRect(mSecondProgressRect, barRadius, barRadius, mSecondProgressPaint);
         }
-        canvas.drawRoundRect(mProgressRect, radius, radius, mProgressPaint);
 
+        // 3. Played luminous white fill
+        if (mProgressRect.right > mProgressRect.left) {
+            canvas.drawRoundRect(mProgressRect, barRadius, barRadius, mProgressPaint);
+        }
+
+        // 4. SponsorBlock / Chapter colored segments
         for (SeekBarRectangle rectangle : mSeekBarRectangles) {
-            canvas.drawRoundRect(rectangle.rect, radius, radius, rectangle.paint);
+            canvas.drawRoundRect(rectangle.rect, barRadius, barRadius, rectangle.paint);
         }
 
-        canvas.drawCircle(mKnobx, getHeight() / 2, radius, mKnobPaint);
+        // 5. Calm resting orb (5.5dp, zero halo) -> blooming focused orb (8.5dp + soft halo)
+        final float cy = getHeight() / 2f;
+        final float restRadius = 5.5f * mDensity;
+        final float knobRadius = restRadius + (mActiveRadius - restRadius) * mFocusFraction;
+        if (mFocusFraction > 0.02f) {
+            int haloAlpha = Math.round(0x5E * mFocusFraction);
+            mKnobGlowPaint.setColor((haloAlpha << 24) | 0x00FFFFFF);
+            canvas.drawCircle(mKnobx, cy, knobRadius + (4.2f * mDensity * mFocusFraction), mKnobGlowPaint);
+        }
+        canvas.drawCircle(mKnobx, cy, knobRadius, mKnobPaint);
     }
 
-    /**
-     * Set progress within 0 and {@link #getMax()}
-     */
     public void setProgress(int progress) {
         if (progress > mMax) {
             progress = mMax;
@@ -172,9 +194,6 @@ public final class SeekBar extends View {
         calculate();
     }
 
-    /**
-     * Set secondary progress within 0 and {@link #getMax()}
-     */
     public void setSecondaryProgress(int progress) {
         if (progress > mMax) {
             progress = mMax;
@@ -185,80 +204,65 @@ public final class SeekBar extends View {
         calculate();
     }
 
-    /**
-     * Get progress within 0 and {@link #getMax()}
-     */
     public int getProgress() {
         return mProgress;
     }
 
-    /**
-     * Get secondary progress within 0 and {@link #getMax()}
-     */
     public int getSecondProgress() {
         return mSecondProgress;
     }
 
-    /**
-     * Get max value.
-     */
     public int getMax() {
         return mMax;
     }
 
-    /**
-     * Set max value.
-     */
     public void setMax(int max) {
         this.mMax = max;
         calculate();
     }
 
-    /**
-     * Set color for progress.
-     */
     public void setProgressColor(int color) {
         mProgressPaint.setColor(color);
     }
 
-    /**
-     * Set color for second progress which is usually for buffering indication.
-     */
     public void setSecondaryProgressColor(int color) {
         mSecondProgressPaint.setColor(color);
     }
 
-    /**
-     * Set color for second progress which is usually for buffering indication.
-     */
     public int getSecondaryProgressColor() {
         return mSecondProgressPaint.getColor();
     }
 
     private void calculate() {
-        final int barHeight = isFocused() ? mActiveBarHeight : mBarHeight;
+        final float barHeight = mBarHeight + (mActiveBarHeight - mBarHeight) * mFocusFraction;
 
         final int width = getWidth();
         final int height = getHeight();
-        final int verticalPadding = (height - barHeight) / 2;
+        if (width <= 0 || height <= 0) {
+            return;
+        }
 
-        mBackgroundRect.set(mBarHeight / 2, verticalPadding,
-                width - mBarHeight / 2, height - verticalPadding);
+        final float verticalPadding = (height - barHeight) / 2f;
+        final float edgeInset = mActiveRadius;
+        final float trackLeft = Math.min(edgeInset, width * 0.1f);
+        final float trackRight = Math.max(trackLeft, width - trackLeft);
+        final float trackWidth = Math.max(1f, trackRight - trackLeft);
 
-        final int radius = isFocused() ? mActiveRadius : mBarHeight / 2;
-        final int progressWidth = width - radius * 2;
-        final float progressPixels = mProgress / (float) mMax * progressWidth;
-        mProgressRect.set(mBarHeight / 2, verticalPadding, mBarHeight / 2 + progressPixels,
-                height - verticalPadding);
+        mBackgroundRect.set(trackLeft, verticalPadding, trackRight, height - verticalPadding);
 
-        final float secondProgressPixels = mSecondProgress / (float) mMax * progressWidth;
-        mSecondProgressRect.set(mProgressRect.right, verticalPadding,
-                mBarHeight / 2 + secondProgressPixels, height - verticalPadding);
+        final float max = mMax > 0 ? (float) mMax : 1f;
+        final float progressPixels = (mProgress / max) * trackWidth;
+        mProgressRect.set(trackLeft, verticalPadding, trackLeft + progressPixels, height - verticalPadding);
 
-        mKnobx = radius + (int) progressPixels;
+        final float secondProgressPixels = (mSecondProgress / max) * trackWidth;
+        final float secondRight = Math.max(mProgressRect.right, trackLeft + secondProgressPixels);
+        mSecondProgressRect.set(mProgressRect.right, verticalPadding, Math.min(trackRight, secondRight), height - verticalPadding);
+
+        mKnobx = trackLeft + progressPixels;
 
         for (SeekBarRectangle seekBarRectangle : mSeekBarRectangles) {
-            seekBarRectangle.rect.set(seekBarRectangle.rect.left, verticalPadding, seekBarRectangle.rect.right, height - verticalPadding);
+            seekBarRectangle.rect.set(seekBarRectangle.rect.left, verticalPadding,
+                    seekBarRectangle.rect.right, height - verticalPadding);
         }
 
         invalidate();
@@ -287,41 +291,40 @@ public final class SeekBar extends View {
     }
 
     public void setSegments(List<SeekBarSegment> segments) {
+        mPendingSegments = segments;
         calculateSegments(segments);
+        invalidate();
     }
 
     private void calculateSegments(List<SeekBarSegment> segments) {
-        if (segments == null) {
-            mSeekBarRectangles.clear();
-            //invalidate();
+        mSeekBarRectangles.clear();
+        if (segments == null || segments.isEmpty()) {
+            return;
+        }
+
+        final int width = getWidth();
+        final int height = getHeight();
+        if (width <= 0 || height <= 0) {
             return;
         }
 
         final int barHeight = isFocused() ? mActiveBarHeight : mBarHeight;
-
-        final int width = getWidth();
-        final int height = getHeight();
-        final int verticalPadding = (height - barHeight) / 2;
-
-        //final int radius = isFocused() ? mActiveRadius : mBarHeight / 2;
-        //final int progressWidth = width - radius * 2;
+        final float verticalPadding = (height - barHeight) / 2f;
+        final float trackLeft = mBackgroundRect.left;
+        final float trackWidth = Math.max(1f, mBackgroundRect.width());
 
         for (SeekBarSegment segment : segments) {
             if (segment.endProgress < 0 || segment.startProgress < 0 || segment.startProgress >= 1) {
                 continue;
             }
 
-            if (segment.endProgress > 1) {
-                segment.endProgress = 1;
-            }
+            float endProgress = Math.min(1f, segment.endProgress);
+            float leftPixels = trackLeft + segment.startProgress * trackWidth;
+            float rightPixels = trackLeft + endProgress * trackWidth;
 
-            float rightPixels = segment.endProgress * width;
-            float leftPixels = segment.startProgress * width;
-
-            // Bookmark segment (1px width) fix
-            float bookmarkWidth = mBarHeight / 2f;
-            if (rightPixels - leftPixels < bookmarkWidth) {
-                rightPixels += bookmarkWidth;
+            float minSegWidth = Math.max(3f * mDensity, mBarHeight / 2f);
+            if (rightPixels - leftPixels < minSegWidth) {
+                rightPixels = Math.min(mBackgroundRect.right, leftPixels + minSegWidth);
             }
 
             SeekBarRectangle rect = new SeekBarRectangle();
@@ -329,12 +332,9 @@ public final class SeekBar extends View {
             rect.paint.setColor(segment.color);
             mSeekBarRectangles.add(rect);
         }
-
-        //invalidate();
     }
 
     // Touch interceptor
-
     private int mScaledTouchSlop;
     private int mPaddingLeft;
     private int mPaddingRight;
@@ -349,7 +349,6 @@ public final class SeekBar extends View {
                 mTouchDownX = event.getX();
                 startDrag(event);
                 break;
-
             case MotionEvent.ACTION_MOVE:
                 if (mIsDragging) {
                     trackTouchEvent(event);
@@ -360,31 +359,24 @@ public final class SeekBar extends View {
                     }
                 }
                 break;
-
             case MotionEvent.ACTION_UP:
                 if (mIsDragging) {
                     trackTouchEvent(event);
                     onStopTrackingTouch();
                     setPressed(false);
                 } else {
-                    // Touch up when we never crossed the touch slop threshold should
-                    // be interpreted as a tap-seek to that location.
                     onStartTrackingTouch();
                     trackTouchEvent(event);
                     onStopTrackingTouch();
                 }
-                // ProgressBar doesn't know to repaint the thumb drawable
-                // in its inactive state when the touch stops (because the
-                // value has not apparently changed)
                 invalidate();
                 break;
-
             case MotionEvent.ACTION_CANCEL:
                 if (mIsDragging) {
                     onStopTrackingTouch();
                     setPressed(false);
                 }
-                invalidate(); // see above explanation
+                invalidate();
                 break;
         }
         return true;
@@ -392,7 +384,6 @@ public final class SeekBar extends View {
 
     private void startDrag(MotionEvent event) {
         setPressed(true);
-
         onStartTrackingTouch();
         trackTouchEvent(event);
         attemptClaimDrag();
@@ -402,61 +393,43 @@ public final class SeekBar extends View {
         if (VERSION.SDK_INT < 21) {
             return;
         }
-
         final Drawable bg = getBackground();
         if (bg != null) {
             bg.setHotspot(x, y);
         }
     }
-    
+
     private void trackTouchEvent(MotionEvent event) {
-        final int x = Math.round(event.getX());
-        final int y = Math.round(event.getY());
-        final int width = getWidth();
-        final int availableWidth = width;
+        final float x = event.getX();
+        final float trackLeft = mBackgroundRect.left;
+        final float trackWidth = Math.max(1f, mBackgroundRect.width());
 
         final float scale;
-        float progress = 0.0f;
-        if (x < mPaddingLeft) {
+        if (x < trackLeft) {
             scale = 0.0f;
-        } else if (x > width - mPaddingRight) {
+        } else if (x > mBackgroundRect.right) {
             scale = 1.0f;
         } else {
-            scale = (x - mPaddingLeft) / (float) availableWidth;
-            progress = mTouchProgressOffset;
+            scale = (x - trackLeft) / trackWidth;
         }
 
         final int range = getMax() - getMin();
-        progress += scale * range + getMin();
+        float progress = mTouchProgressOffset + scale * range + getMin();
 
-        setHotspot(x, y);
+        setHotspot(x, event.getY());
         setProgress(Math.round(progress));
         if (mAccessibilitySeekListener != null) {
             mAccessibilitySeekListener.onAccessibilitySeekProgress(mProgress);
         }
     }
 
-    /**
-     * Tries to claim the user's drag motion, and requests disallowing any
-     * ancestors from stealing events in the drag.
-     */
     private void attemptClaimDrag() {
-        //if (mParent != null) {
-        //    mParent.requestDisallowInterceptTouchEvent(true);
-        //}
     }
 
-    /**
-     * This is called when the user has started touching this widget.
-     */
     void onStartTrackingTouch() {
         mIsDragging = true;
     }
 
-    /**
-     * This is called when the user either releases his touch or the touch is
-     * canceled.
-     */
     void onStopTrackingTouch() {
         mIsDragging = false;
     }

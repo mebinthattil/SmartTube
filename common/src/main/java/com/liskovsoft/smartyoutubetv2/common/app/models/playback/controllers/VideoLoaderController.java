@@ -31,7 +31,54 @@ import io.reactivex.disposables.Disposable;
 public class VideoLoaderController extends BasePlayerController {
     private static final String TAG = VideoLoaderController.class.getSimpleName();
     private static final int MIN_SHUFFLE_SIZE = 30;
+    private static final long FORMAT_CACHE_TTL_MS = 90_000L;
+    private static String sCachedFormatVideoId;
+    private static MediaItemFormatInfo sCachedFormatInfo;
+    private static long sCachedFormatTimeMs;
+    private static Disposable sPrefetchAction;
+    private static String sPrefetchVideoId;
+    private String mSkipHandoffVideoId;
     private final Playlist mPlaylist;
+
+    /**
+     * Speculatively pre-fetches MediaItemFormatInfo while the user lingers on a video card
+     * so both Hero live preview and fullscreen clicks start with 0ms YouTube API latency.
+     */
+    public static void prefetchFormatInfo(String videoId, boolean allowRestricted) {
+        if (videoId == null || videoId.isEmpty()) {
+            return;
+        }
+        if (videoId.equals(sCachedFormatVideoId) && sCachedFormatInfo != null
+                && (System.currentTimeMillis() - sCachedFormatTimeMs) < FORMAT_CACHE_TTL_MS) {
+            return;
+        }
+        if (videoId.equals(sPrefetchVideoId) && RxHelper.isAnyActionRunning(sPrefetchAction)) {
+            return;
+        }
+        RxHelper.disposeActions(sPrefetchAction);
+        sPrefetchVideoId = videoId;
+        try {
+            ServiceManager service = YouTubeServiceManager.instance();
+            service.allowRestrictedVideos(allowRestricted);
+            sPrefetchAction = service.getMediaItemService()
+                    .getFormatInfoObserve(videoId)
+                    .subscribe(
+                            formatInfo -> {
+                                if (formatInfo != null && !formatInfo.isUnplayable()) {
+                                    sCachedFormatVideoId = videoId;
+                                    sCachedFormatInfo = formatInfo;
+                                    sCachedFormatTimeMs = System.currentTimeMillis();
+                                }
+                            },
+                            error -> { /* quiet background prefetch */ }
+                    );
+        } catch (Throwable ignored) {}
+    }
+
+    public static void cancelPrefetch() {
+        RxHelper.disposeActions(sPrefetchAction);
+        sPrefetchVideoId = null;
+    }
     private Video mPendingVideo;
     private SuggestionsController mSuggestionsController;
     private ErrorFixerController mErrorFixerController;
@@ -93,13 +140,37 @@ public class VideoLoaderController extends BasePlayerController {
         }
     }
 
+    public void skipNextLoadForHandoff(String videoId) {
+        mSkipHandoffVideoId = videoId;
+    }
+
     @Override
     public void onEngineInitialized() {
         if (getPlayer() == null) {
             return;
         }
-        
-        loadVideo(Helpers.firstNonNull(mPendingVideo, getVideo()));
+
+        Video target = Helpers.firstNonNull(mPendingVideo, getVideo());
+        if (mSkipHandoffVideoId != null && target != null
+                && mSkipHandoffVideoId.equals(target.videoId)
+                && getPlayer().containsMedia()) {
+            mSkipHandoffVideoId = null;
+            mPendingVideo = null;
+            mPlaylist.setCurrent(target);
+            getPlayer().setVideo(target);
+            getPlayer().setButtonState(R.id.action_repeat, getPlayerData().getPlaybackMode());
+            getPlayer().showProgressBar(false);
+            getPlayer().showBackground(null);
+            VideoStateController stateController = getController(VideoStateController.class);
+            if (stateController != null) {
+                stateController.skipNextRestorePosition();
+            }
+            getMainController().onVideoLoaded(target);
+            return;
+        }
+        mSkipHandoffVideoId = null;
+
+        loadVideo(target);
         getPlayer().setButtonState(R.id.action_repeat, getPlayerData().getPlaybackMode());
         mPendingVideo = null;
     }
@@ -255,6 +326,16 @@ public class VideoLoaderController extends BasePlayerController {
         Utils.post(mShowProgressBar);
         disposeActions();
 
+        // Instant hit from short-lived preview FormatInfo cache (saves 1.5-3s YouTube API fetch)
+        if (video != null && video.videoId != null
+                && video.videoId.equals(sCachedFormatVideoId)
+                && sCachedFormatInfo != null
+                && (System.currentTimeMillis() - sCachedFormatTimeMs) < FORMAT_CACHE_TTL_MS) {
+            MediaItemFormatInfo cached = sCachedFormatInfo;
+            Utils.post(() -> processFormatInfo(cached));
+            return;
+        }
+
         ServiceManager service = YouTubeServiceManager.instance();
         service.allowRestrictedVideos(!getGeneralData().isChildModeEnabled());
         MediaItemService mediaItemManager = service.getMediaItemService();
@@ -271,6 +352,12 @@ public class VideoLoaderController extends BasePlayerController {
 
         if (player == null || getVideo() == null) {
             return;
+        }
+
+        if (formatInfo != null && !formatInfo.isUnplayable() && getVideo().videoId != null) {
+            sCachedFormatVideoId = getVideo().videoId;
+            sCachedFormatInfo = formatInfo;
+            sCachedFormatTimeMs = System.currentTimeMillis();
         }
 
         String bgImageUrl = null;

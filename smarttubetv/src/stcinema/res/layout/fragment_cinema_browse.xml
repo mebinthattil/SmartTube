@@ -1,0 +1,518 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/cinema_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/cinema_bg"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+    <!-- LAYER 0: FULL-BLEED DYNAMIC CINEMA HERO BACKDROP + INLINE VIDEO PREVIEW -->
+    <FrameLayout
+        android:id="@+id/hero_backdrop_frame"
+        android:layout_width="match_parent"
+        android:layout_height="376dp">
+
+        <ImageView
+            android:id="@+id/hero_backdrop_a"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:alpha="0" />
+
+        <ImageView
+            android:id="@+id/hero_backdrop_b"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:alpha="0" />
+
+        <com.liskovsoft.smartyoutubetv2.tv.ui.widgets.embedplayer.EmbedPlayerView
+            android:id="@+id/hero_preview_player"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:alpha="0"
+            app:surface_type="texture_view"
+            app:resize_mode="zoom"
+            app:use_controller="false"
+            app:shutter_background_color="@android:color/transparent" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_cinema_scrim_horizontal" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_cinema_scrim_vertical" />
+    </FrameLayout>
+
+    <!-- LAYER 1: FOREGROUND VERTICAL SHELL (TOP BAR + HERO INFO + DYNAMIC CONTENT) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:clipChildren="false"
+        android:clipToPadding="false">
+
+        <!-- APPLE TV+ FLOATING TOP BAR (Unified 36dp flanking pills + 40dp centered nav track) -->
+        <FrameLayout
+            android:id="@+id/cinema_top_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="36dp"
+            android:paddingEnd="36dp"
+            android:paddingTop="18dp"
+            android:paddingBottom="8dp"
+            android:clipChildren="false"
+            android:clipToPadding="false">
+
+            <!-- Left Cluster: Minimal YouTube Brand Mark + 36dp Search Glass Pill -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="start|center_vertical"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:clipChildren="false"
+                android:clipToPadding="false">
+
+                <FrameLayout
+                    android:layout_width="28dp"
+                    android:layout_height="20dp"
+                    android:background="@drawable/bg_cinema_brand_icon">
+
+                    <ImageView
+                        android:layout_width="11dp"
+                        android:layout_height="11dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_cinema_play"
+                        android:tint="@color/cinema_text_primary" />
+                </FrameLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:fontFamily="sans-serif"
+                    android:letterSpacing="-0.03"
+                    android:text="YouTube"
+                    android:textColor="@color/cinema_text_primary"
+                    android:textSize="16.5sp"
+                    android:textStyle="bold" />
+
+                <!-- 36dp Search Glass Pill placed cleanly right after YouTube logo & title -->
+                <LinearLayout
+                    android:id="@+id/cinema_search_btn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="16dp"
+                    android:background="@drawable/bg_cinema_pill_button"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="13dp"
+                    android:paddingEnd="15dp">
+
+                    <ImageView
+                        android:id="@+id/cinema_search_icon"
+                        android:layout_width="14dp"
+                        android:layout_height="14dp"
+                        android:src="@drawable/ic_cinema_search" />
+
+                    <TextView
+                        android:id="@+id/cinema_search_label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="7dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="@string/cinema_search"
+                        android:textColor="@color/cinema_text_primary"
+                        android:textSize="12.5sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Dead-Center Floating Charcoal Glass Nav Track (40dp tall: 32dp tabs + 4dp padding) -->
+            <HorizontalScrollView
+                android:id="@+id/cinema_nav_scroll"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_cinema_nav_bar"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:scrollbars="none"
+                android:clipChildren="true"
+                android:clipToPadding="true">
+
+                <LinearLayout
+                    android:id="@+id/cinema_nav_tabs"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <!-- Right Controls: Now Playing (when bg), True 36dp Circle Settings Gear, 36dp Account -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end|center_vertical"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:clipChildren="false"
+                android:clipToPadding="false">
+
+                <TextView
+                    android:id="@+id/cinema_pip_pill"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_cinema_pill_button"
+                    android:focusable="true"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:text="@string/cinema_now_playing"
+                    android:textColor="@color/cinema_text_primary"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
+
+                <!-- True 36dp x 36dp Circle Settings Gear Pill (with active selected state) -->
+                <FrameLayout
+                    android:id="@+id/cinema_settings_btn"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_cinema_pill_button"
+                    android:focusable="true">
+
+                    <ImageView
+                        android:id="@+id/cinema_settings_icon"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_cinema_quality"
+                        android:tint="@color/cinema_text_primary" />
+                </FrameLayout>
+
+                <!-- 36dp Account Switcher Glass Pill -->
+                <LinearLayout
+                    android:id="@+id/cinema_account_btn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_cinema_pill_button"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="14dp">
+
+                    <FrameLayout
+                        android:layout_width="22dp"
+                        android:layout_height="22dp">
+
+                        <ImageView
+                            android:id="@+id/cinema_account_avatar"
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
+                            android:scaleType="centerCrop"
+                            android:visibility="gone" />
+
+                        <ImageView
+                            android:id="@+id/cinema_account_guest_icon"
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:layout_gravity="center"
+                            android:src="@drawable/ic_cinema_person"
+                            android:tint="@color/cinema_text_primary" />
+
+                        <TextView
+                            android:id="@+id/cinema_account_initial"
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
+                            android:background="@drawable/bg_cinema_dot_blue"
+                            android:fontFamily="sans-serif-medium"
+                            android:gravity="center"
+                            android:textColor="@color/cinema_text_primary"
+                            android:textSize="11sp"
+                            android:visibility="gone" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:id="@+id/cinema_account_name"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:ellipsize="end"
+                        android:fontFamily="sans-serif-medium"
+                        android:maxWidth="96dp"
+                        android:singleLine="true"
+                        android:text="@string/cinema_sign_in"
+                        android:textColor="@color/cinema_text_primary"
+                        android:textSize="12.5sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- HERO METADATA STAGE (Clean Apple tvOS typography, no fake non-focusable CTA pill) -->
+        <LinearLayout
+            android:id="@+id/cinema_hero_info"
+            android:layout_width="match_parent"
+            android:layout_height="148dp"
+            android:gravity="bottom"
+            android:orientation="vertical"
+            android:paddingStart="36dp"
+            android:paddingEnd="36dp"
+            android:paddingBottom="12dp">
+
+            <!-- Channel + Stats + Real Status Badges -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/hero_channel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.10"
+                    android:maxWidth="260dp"
+                    android:singleLine="true"
+                    android:textAllCaps="true"
+                    android:textColor="@color/cinema_text_primary"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/hero_stats"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif"
+                    android:maxWidth="280dp"
+                    android:singleLine="true"
+                    android:textColor="@color/cinema_text_secondary"
+                    android:textSize="11.5sp" />
+
+                <TextView
+                    android:id="@+id/hero_live_badge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_cinema_pill_live"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.08"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="2dp"
+                    android:paddingBottom="2dp"
+                    android:text="@string/cinema_live"
+                    android:textColor="@color/cinema_text_primary"
+                    android:textSize="11sp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/hero_preview_badge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_cinema_pill_emerald"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.08"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="2dp"
+                    android:paddingBottom="2dp"
+                    android:text="@string/cinema_preview_playing"
+                    android:textColor="@color/cinema_emerald_soft"
+                    android:textSize="11sp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Hero Video Title -->
+            <TextView
+                android:id="@+id/hero_title"
+                android:layout_width="620dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif"
+                android:letterSpacing="-0.02"
+                android:lineSpacingMultiplier="1.08"
+                android:maxLines="2"
+                android:shadowColor="#B3000000"
+                android:shadowDx="0"
+                android:shadowDy="3"
+                android:shadowRadius="10"
+                android:textColor="@color/cinema_text_primary"
+                android:textSize="24sp"
+                android:textStyle="bold" />
+
+            <!-- Hero Description / Secondary Line -->
+            <TextView
+                android:id="@+id/hero_subtitle"
+                android:layout_width="560dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif"
+                android:lineSpacingMultiplier="1.2"
+                android:maxLines="2"
+                android:textColor="@color/cinema_text_secondary"
+                android:textSize="12.5sp" />
+        </LinearLayout>
+
+        <!-- SETTINGS CONTEXT HEADER (Visible only when Settings gear is active) -->
+        <LinearLayout
+            android:id="@+id/cinema_settings_header"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="38dp"
+            android:paddingEnd="38dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="4dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif"
+                android:letterSpacing="-0.02"
+                android:text="Settings"
+                android:textColor="@color/cinema_text_primary"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/cinema_settings_mode_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:background="@drawable/bg_cinema_hud_status_pill"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.06"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="3dp"
+                android:paddingBottom="3dp"
+                android:text="Simple Mode"
+                android:textColor="@color/cinema_text_secondary"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- CHANNEL STRIP (Visible only in Multi-Grid Channels section) -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/cinema_channel_strip"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:paddingStart="36dp"
+            android:paddingEnd="36dp"
+            android:visibility="gone" />
+
+        <!-- DYNAMIC CONTENT DECK -->
+        <FrameLayout
+            android:id="@+id/cinema_content_host"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipChildren="true"
+            android:clipToPadding="true">
+
+            <!-- Mode 1: Horizontal Rails -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/cinema_rows_recycler"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:paddingTop="6dp"
+                android:paddingBottom="28dp" />
+
+            <!-- Mode 2: 4-Col Video Grid / 5-Col Portrait Shorts Grid -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/cinema_grid_recycler"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:paddingStart="30dp"
+                android:paddingEnd="30dp"
+                android:paddingTop="14dp"
+                android:paddingBottom="28dp"
+                android:visibility="gone" />
+
+            <!-- Mode 3: Settings Grid -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/cinema_settings_recycler"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:paddingStart="30dp"
+                android:paddingEnd="30dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="28dp"
+                android:visibility="gone" />
+
+            <!-- Mode 4: Error / Sign-In Card -->
+            <LinearLayout
+                android:id="@+id/cinema_error_container"
+                android:layout_width="420dp"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_cinema_player_glass"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="28dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/cinema_error_message"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif"
+                    android:gravity="center"
+                    android:lineSpacingMultiplier="1.3"
+                    android:textColor="@color/cinema_text_primary"
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/cinema_error_action"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:layout_marginTop="18dp"
+                    android:background="@drawable/bg_cinema_pill_button"
+                    android:focusable="true"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:paddingStart="24dp"
+                    android:paddingEnd="24dp"
+                    android:textColor="@color/cinema_text_primary"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <!-- Subtle Apple TV White Loading Ring -->
+            <ProgressBar
+                android:id="@+id/cinema_loading"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                android:indeterminateTint="#CCFFFFFF"
+                android:visibility="gone" />
+        </FrameLayout>
+    </LinearLayout>
+</FrameLayout>

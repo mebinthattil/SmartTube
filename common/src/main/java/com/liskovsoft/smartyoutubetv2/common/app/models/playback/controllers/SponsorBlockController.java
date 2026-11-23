@@ -26,7 +26,9 @@ import io.reactivex.Observable;
 import io.reactivex.disposables.Disposable;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 public class SponsorBlockController extends BasePlayerController {
@@ -36,6 +38,7 @@ public class SponsorBlockController extends BasePlayerController {
     private MediaItemService mMediaItemService;
     private List<SponsorSegment> mOriginalSegments;
     private List<SponsorSegment> mActiveSegments;
+    private final Set<Long> mPromptedSegmentEnds = new HashSet<>();
     private long mLastSkipPosMs;
     private boolean mSkipExclude;
     private Disposable mSegmentsAction;
@@ -87,8 +90,10 @@ public class SponsorBlockController extends BasePlayerController {
     @Override
     public void onNewVideo(Video item) {
         mSkipExclude = false;
+        mPromptedSegmentEnds.clear();
         if (getPlayer() != null) {
             getPlayer().setSeekBarSegments(null); // reset colors
+            getPlayer().hideSponsorSkipPopup();
         }
     }
 
@@ -219,6 +224,7 @@ public class SponsorBlockController extends BasePlayerController {
 
         // Reset previously found segment (fix no dialog popup)
         mLastSkipPosMs = 0;
+        mPromptedSegmentEnds.clear();
     }
 
     private void skipSegment(long interval) {
@@ -252,6 +258,12 @@ public class SponsorBlockController extends BasePlayerController {
         if (fullMatch) {
             return positionMs >= segment.getStartMs() && positionMs <= segment.getEndMs();
         } else {
+            int action = getSponsorBlockData().getAction(segment.getCategory());
+            if (action == SponsorBlockData.ACTION_SHOW_DIALOG) {
+                // Allow triggering the 5s prompt even if the user handed off or sought mid-segment
+                // (as long as at least 3s remain in the segment). Guarded by mPromptedSegmentEnds.
+                return positionMs >= segment.getStartMs() && positionMs <= (segment.getEndMs() - 3_000);
+            }
             long windowSizeMs = (long) (2_000 * getPlayer().getSpeed());
             return positionMs >= segment.getStartMs() && positionMs <= Math.min(segment.getStartMs() + windowSizeMs, segment.getEndMs());
         }
@@ -399,12 +411,21 @@ public class SponsorBlockController extends BasePlayerController {
                 || (skipDurationMs < getSponsorBlockData().getIgnoredDurationMs());
 
         if (!isDurationIgnored) {
-            if (type == SponsorBlockData.ACTION_SKIP_ONLY || getPlayer().isInPIPMode() || Utils.isScreenOff(getContext()) || isEmbedPlayer()) {
+            if (isEmbedPlayer()) {
+                // Never auto-skip or display skip prompts during inline Hero preview
+                return;
+            }
+            if (type == SponsorBlockData.ACTION_SHOW_DIALOG) {
+                if (getPlayer().isInPIPMode() || Utils.isScreenOff(getContext())) {
+                    return;
+                }
+                if (mLastSkipPosMs != skipPosMs && mPromptedSegmentEnds.add(skipPosMs)) {
+                    getPlayer().showSponsorSkipPopup(skipPosMs, skipMessage);
+                }
+            } else if (type == SponsorBlockData.ACTION_SKIP_ONLY || getPlayer().isInPIPMode() || Utils.isScreenOff(getContext())) {
                 simpleSkip(skipPosMs);
             } else if (type == SponsorBlockData.ACTION_SKIP_WITH_TOAST) {
                 messageSkip(skipPosMs, skipMessage);
-            } else if (type == SponsorBlockData.ACTION_SHOW_DIALOG) {
-                confirmSkip(skipPosMs, skipMessage);
             }
         }
 

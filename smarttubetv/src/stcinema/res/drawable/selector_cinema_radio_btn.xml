@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Apple tvOS clean checkmark selector for radio/single-choice sheets (replaces Android radio circles) -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true" android:state_focused="true" android:drawable="@drawable/ic_cinema_check_dark" />
+    <item android:state_checked="true" android:state_pressed="true" android:drawable="@drawable/ic_cinema_check_dark" />
+    <item android:state_checked="true" android:drawable="@drawable/ic_cinema_check_emerald" />
+    <item>
+        <shape android:shape="rectangle">
+            <size android:width="18dp" android:height="18dp" />
+            <solid android:color="@android:color/transparent" />
+        </shape>
+    </item>
+</selector>

@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Apple tvOS Floating Rounded Glass Sheet (Quality, Speed, Developer Mode, Options) -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/main_frame"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:layout_marginTop="20dp"
+    android:layout_marginBottom="20dp"
+    android:layout_marginEnd="20dp"
+    android:background="@drawable/bg_cinema_dialog_sheet"
+    android:elevation="24dp"
+    android:orientation="vertical"
+    android:transitionGroup="false">
+
+    <FrameLayout
+        android:id="@+id/decor_title_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@android:color/transparent"
+        android:elevation="0dp"
+        android:transitionGroup="false">
+
+        <com.liskovsoft.smartyoutubetv2.tv.ui.widgets.marqueetextviewcompat.TitleMarqueeTextViewCompat
+            android:id="@+id/decor_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/lb_preference_decor_title_text_height"
+            android:layout_marginTop="14dp"
+            android:layout_marginBottom="10dp"
+            android:layout_marginStart="@dimen/lb_preference_decor_title_margin_start"
+            android:layout_marginEnd="@dimen/lb_preference_decor_title_margin_end"
+            android:fontFamily="sans-serif"
+            android:textStyle="bold"
+            android:letterSpacing="-0.02"
+            android:gravity="center_vertical"
+            android:textSize="@dimen/lb_preference_decor_title_text_size"
+            android:textColor="@color/cinema_text_primary"
+            android:singleLine="false"
+            android:maxLines="2"
+            android:ellipsize="end" />
+    </FrameLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginStart="20dp"
+        android:layout_marginEnd="20dp"
+        android:layout_marginBottom="6dp"
+        android:background="#1AFFFFFF" />
+
+    <TextView
+        android:id="@android:id/message"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif"
+        android:paddingTop="8dp"
+        android:paddingBottom="10dp"
+        android:paddingStart="22dp"
+        android:paddingEnd="22dp"
+        android:textColor="@color/cinema_text_secondary"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
+    <androidx.leanback.widget.VerticalGridView
+        android:id="@android:id/list"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:paddingTop="4dp"
+        android:paddingBottom="14dp"
+        android:clipToPadding="false"
+        android:transitionGroup="true" />
+</LinearLayout>

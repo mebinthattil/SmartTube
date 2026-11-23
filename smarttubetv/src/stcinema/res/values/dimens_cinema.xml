@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sleek Apple TV proportions for the fullscreen Liquid Glass Player HUD -->
+    <dimen name="lb_details_description_title_text_size">20sp</dimen>
+    <dimen name="lb_details_description_title_resized_text_size">18sp</dimen>
+    <dimen name="lb_details_description_title_line_spacing">24dp</dimen>
+    <dimen name="lb_details_description_title_baseline">20dp</dimen>
+    <dimen name="lb_details_description_subtitle_text_size">11.5sp</dimen>
+    <integer name="lb_details_description_title_max_lines">1</integer>
+    <integer name="lb_details_description_subtitle_max_lines">1</integer>
+
+    <!-- Fallback legacy Leanback control dimens -->
+    <dimen name="lb_control_button_diameter">36dp</dimen>
+    <dimen name="lb_control_button_height">36dp</dimen>
+    <dimen name="lb_control_button_secondary_diameter">36dp</dimen>
+    <dimen name="lb_control_button_secondary_height">36dp</dimen>
+    <dimen name="lb_control_icon_width">20dp</dimen>
+    <dimen name="lb_control_icon_height">20dp</dimen>
+    <dimen name="lb_control_button_text_size">12sp</dimen>
+    <dimen name="lb_playback_controls_child_margin_default">36dp</dimen>
+    <dimen name="lb_playback_controls_child_margin_bigger">40dp</dimen>
+    <dimen name="lb_playback_controls_child_margin_biggest">44dp</dimen>
+
+    <!-- Apple TV Cinema Scrub Bar (refined calm resting track -> luminous focused bloom) -->
+    <dimen name="lb_playback_controls_time_text_size">13sp</dimen>
+    <dimen name="lb_playback_transport_progressbar_bar_height">4.5dp</dimen>
+    <dimen name="lb_playback_transport_progressbar_active_bar_height">7.5dp</dimen>
+    <dimen name="lb_playback_transport_progressbar_active_radius">8.5dp</dimen>
+    <dimen name="lb_playback_transport_progressbar_height">26dp</dimen>
+    <dimen name="lb_playback_transport_control_info_margin_bottom">0dp</dimen>
+    <dimen name="lb_playback_transport_control_row_padding_bottom">0dp</dimen>
+    <!-- CRITICAL: Leanback WindowAlignment uses sign of -mPaddingBottom (<0 = bottom edge, >=0 = top edge!).
+         1px ensures bottom-edge alignment (y = -1..1079) with ZERO bottom peek of Chapters/Suggestions! -->
+    <dimen name="lb_playback_controls_padding_bottom">1px</dimen>
+    <dimen name="lb_playback_transport_thumbs_bottom_margin">10dp</dimen>
+    <dimen name="lb_playback_transport_image_height">48dp</dimen>
+    <dimen name="lb_playback_transport_controlbar_margin_start">0dp</dimen>
+
+    <!-- Apple tvOS Floating Glass Dialog Sheet proportions -->
+    <dimen name="lb_settings_pane_width">384dp</dimen>
+    <dimen name="lb_preference_decor_title_text_size">19sp</dimen>
+    <dimen name="lb_preference_decor_title_margin_top">16dp</dimen>
+    <dimen name="lb_preference_decor_title_margin_start">22dp</dimen>
+    <dimen name="lb_preference_decor_title_margin_end">22dp</dimen>
+    <dimen name="lb_preference_decor_title_text_height">52dp</dimen>
+    <dimen name="lb_preference_item_primary_text_size">13.5sp</dimen>
+    <dimen name="lb_preference_item_secondary_text_size">11.5sp</dimen>
+    <dimen name="lb_preference_item_padding_start">16dp</dimen>
+    <dimen name="lb_preference_item_padding_end">16dp</dimen>
+    <dimen name="lb_preference_item_text_space_top">11dp</dimen>
+    <dimen name="lb_preference_item_text_space_bottom">11dp</dimen>
+</resources>

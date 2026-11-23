@@ -8,13 +8,17 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.OptionItem;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.FormatItem;
+import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
 import com.liskovsoft.smartyoutubetv2.common.utils.AppDialogUtil;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 public class HQDialogController extends BasePlayerController {
     private static final String TAG = HQDialogController.class.getSimpleName();
@@ -46,6 +50,12 @@ public class HQDialogController extends BasePlayerController {
     private void onHighQualityClicked() {
         fitVideoIntoDialog();
 
+        // Simple family-friendly YouTube quality picker by default; full fine-grained controls in Developer Mode
+        if (!GeneralData.instance(getContext()).isDeveloperModeEnabled()) {
+            showSimpleQualityDialog();
+            return;
+        }
+
         addQualityCategories();
         addAudioLanguage();
         addPresetsCategory();
@@ -61,6 +71,107 @@ public class HQDialogController extends BasePlayerController {
         appendOptions(mCategories);
 
         mAppDialogPresenter.showDialog(getContext().getString(R.string.playback_settings), this::onDialogHide);
+    }
+
+    /**
+     * Familiar YouTube-style resolution selector (Auto, 4K, 1440p, 1080p, 720p, 480p, 360p)
+     * with one crisp entry per resolution — automatically selecting the best codec/fps under the hood.
+     */
+    private void showSimpleQualityDialog() {
+        if (getPlayer() == null) {
+            return;
+        }
+        List<FormatItem> allFormats = getPlayer().getVideoFormats();
+        FormatItem currentFormat = getPlayer().getVideoFormat();
+        int currentHeight = currentFormat != null ? currentFormat.getHeight() : -1;
+        FormatItem savedFormat = getPlayerData().getFormat(FormatItem.TYPE_VIDEO);
+        FormatItem defaultDeviceFormat = getPlayerData().getDefaultVideoFormat();
+        boolean isAutoSaved = savedFormat == null || savedFormat.isDefault() || savedFormat.getHeight() <= 0
+                || (defaultDeviceFormat != null && savedFormat.equals(defaultDeviceFormat));
+
+        // Deduplicate by resolution height (highest first), preferring highest fps & best codec (VP9 > AVC > AV1)
+        TreeMap<Integer, FormatItem> bestByHeight = new TreeMap<>(Collections.reverseOrder());
+        if (allFormats != null) {
+            for (FormatItem item : allFormats) {
+                if (item == null || item.isDefault() || item.getHeight() < 240) {
+                    continue;
+                }
+                int bucketHeight = normalizeQualityBucket(item.getHeight());
+                FormatItem existing = bestByHeight.get(bucketHeight);
+                if (existing == null || isBetterSimpleFormat(item, existing)) {
+                    bestByHeight.put(bucketHeight, item);
+                }
+            }
+        }
+
+        List<OptionItem> options = new ArrayList<>();
+        String autoLabel = currentHeight > 0
+                ? ("Auto (" + normalizeQualityBucket(currentHeight) + "p)")
+                : "Auto (Recommended)";
+        options.add(UiOptionItem.from(autoLabel, opt -> {
+            FormatItem autoTarget = defaultDeviceFormat != null
+                    ? defaultDeviceFormat
+                    : (bestByHeight.isEmpty() ? FormatItem.VIDEO_FHD_VP9_60 : bestByHeight.firstEntry().getValue());
+            applySimpleVideoFormat(autoTarget, autoTarget);
+        }, isAutoSaved));
+
+        for (Map.Entry<Integer, FormatItem> entry : bestByHeight.entrySet()) {
+            int h = entry.getKey();
+            FormatItem target = entry.getValue();
+            boolean selected = !isAutoSaved && currentHeight > 0
+                    && normalizeQualityBucket(currentHeight) == h;
+            String label = formatSimpleHeight(h);
+            options.add(UiOptionItem.from(label, opt -> applySimpleVideoFormat(target, target), selected));
+        }
+
+        mAppDialogPresenter.appendRadioCategory("Video Quality", options);
+        mAppDialogPresenter.showDialog("Quality", this::onDialogHide);
+    }
+
+    private void applySimpleVideoFormat(FormatItem playFormat, FormatItem persistFormat) {
+        if (getPlayer() == null) {
+            return;
+        }
+        if (playFormat != null) {
+            getPlayer().setFormat(playFormat);
+        }
+        if (persistFormat != null) {
+            getPlayerData().setFormat(persistFormat);
+        }
+        mAppDialogPresenter.closeDialog();
+        getPlayer().showOverlay(false);
+    }
+
+    private static int normalizeQualityBucket(int height) {
+        if (height >= 2000) return 2160;
+        if (height >= 1350) return 1440;
+        if (height >= 1000) return 1080;
+        if (height >= 680) return 720;
+        if (height >= 440) return 480;
+        if (height >= 320) return 360;
+        return 240;
+    }
+
+    private static String formatSimpleHeight(int height) {
+        int bucket = normalizeQualityBucket(height);
+        if (bucket >= 2160) return "2160p (4K)";
+        if (bucket == 1440) return "1440p (HD)";
+        if (bucket == 1080) return "1080p (Full HD)";
+        if (bucket == 720) return "720p (HD)";
+        return bucket + "p";
+    }
+
+    private static boolean isBetterSimpleFormat(FormatItem candidate, FormatItem existing) {
+        float cFps = candidate.getFrameRate();
+        float eFps = existing.getFrameRate();
+        if (Math.abs(cFps - eFps) > 5f) {
+            return cFps > eFps;
+        }
+        String cTitle = candidate.getTitle() != null ? candidate.getTitle().toString().toLowerCase() : "";
+        String eTitle = existing.getTitle() != null ? existing.getTitle().toString().toLowerCase() : "";
+        int cScore = cTitle.contains("vp9") ? 3 : (cTitle.contains("avc") ? 2 : 1);
+        int eScore = eTitle.contains("vp9") ? 3 : (eTitle.contains("avc") ? 2 : 1);
+        return cScore > eScore;
     }
 
     private void addQualityCategories() {

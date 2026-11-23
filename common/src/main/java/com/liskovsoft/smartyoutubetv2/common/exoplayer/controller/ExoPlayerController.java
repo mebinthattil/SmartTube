@@ -18,7 +18,9 @@ import com.google.android.exoplayer2.source.sabr.manifest.SabrManifest;
 import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
 import com.google.android.exoplayer2.trackselection.TrackSelection;
 import com.google.android.exoplayer2.trackselection.TrackSelectionArray;
+import com.google.android.exoplayer2.video.VideoListener;
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItemFormatInfo;
+import com.liskovsoft.smartyoutubetv2.common.exoplayer.versions.selector.StagedUpgradeTrackSelection;
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv2.common.BuildConfig;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
@@ -64,6 +66,26 @@ public class ExoPlayerController implements Player.EventListener, LiveStateProvi
     private VolumeBooster mVolumeBooster;
     private boolean mIsEnded;
     private Runnable mOnVideoLoaded;
+    private StagedUpgradeTrackSelection.Factory mStagedTrackFactory;
+    private VideoListener mQualitySyncVideoListener;
+
+    public void setStagedTrackFactory(StagedUpgradeTrackSelection.Factory factory) {
+        mStagedTrackFactory = factory;
+    }
+
+    public void setStagedFastStartEnabled(boolean enabled) {
+        mTrackSelectorManager.setStagedFastStartEnabled(enabled);
+    }
+
+    /**
+     * Promotes the active staged video TrackSelection to full 1080p/4K quality on the very next
+     * buffer chunk WITHOUT flushing the buffer, resetting the decoder, or showing a spinner.
+     */
+    public void promoteStagedQuality() {
+        if (mStagedTrackFactory != null) {
+            mStagedTrackFactory.promoteActiveSelection();
+        }
+    }
 
     public ExoPlayerController(Context context, PlayerEventListener eventListener) {
         PlayerTweaksData playerTweaksData = PlayerTweaksData.instance(context);
@@ -175,6 +197,9 @@ public class ExoPlayerController implements Player.EventListener, LiveStateProvi
 
         mTrackSelectorManager.setMergedSource(mediaSource instanceof MergingMediaSource);
         mTrackSelectorManager.invalidate();
+        if (mStagedTrackFactory != null) {
+            mStagedTrackFactory.resetForNewSource();
+        }
         mOnSourceChanged = true;
         mEventListener.onSourceChanged(getVideo());
         mPlayer.prepare(mediaSource);
@@ -279,6 +304,21 @@ public class ExoPlayerController implements Player.EventListener, LiveStateProvi
     public void setPlayer(SimpleExoPlayer player) {
         mPlayer = player;
         player.addListener(this);
+        if (mQualitySyncVideoListener == null) {
+            mQualitySyncVideoListener = new VideoListener() {
+                @Override
+                public void onVideoSizeChanged(int width, int height, int unappliedRotationDegrees, float pixelWidthHeightRatio) {
+                    if (mPlayer != null) {
+                        Format vf = mPlayer.getVideoFormat();
+                        if (vf != null && mTrackFormatter != null) {
+                            mTrackFormatter.setFormat(vf);
+                            setQualityInfo(mTrackFormatter.getQualityLabel());
+                        }
+                    }
+                }
+            };
+        }
+        player.addVideoListener(mQualitySyncVideoListener);
     }
 
     //@Override
@@ -288,6 +328,12 @@ public class ExoPlayerController implements Player.EventListener, LiveStateProvi
     
     public void setPlayerView(PlayerView playerView) {
         mPlayerView = playerView;
+    }
+
+    public void refreshQualityInfo() {
+        if (mTrackFormatter != null) {
+            setQualityInfo(mTrackFormatter.getQualityLabel());
+        }
     }
     
     public void setTrackSelector(DefaultTrackSelector trackSelector) {
@@ -331,6 +377,19 @@ public class ExoPlayerController implements Player.EventListener, LiveStateProvi
         }
     }
 
+    /**
+     * Applies a transient track selection (e.g. fast-start 720p preview or next-chunk upgrade)
+     * without broadcasting onTrackSelected or mutating saved user preferences.
+     */
+    public void selectFormatTransient(FormatItem formatItem) {
+        if (formatItem != null && formatItem.getTrack() != null) {
+            FormatItem selectedFormatItem = getSelectedFormat(formatItem.getTrack().rendererIndex);
+            if (!formatItem.equals(selectedFormatItem)) {
+                mTrackSelectorManager.selectTrack(formatItem.getTrack());
+            }
+        }
+    }
+
     public FormatItem getVideoFormat() {
         return getSelectedFormat(TrackSelectorManager.RENDERER_INDEX_VIDEO);
     }
@@ -363,8 +422,8 @@ public class ExoPlayerController implements Player.EventListener, LiveStateProvi
                 // EXO: 2.12.1
                 //Format format = selection.getSelectedFormat();
 
-                // EXO: 2.13.1
-                Format format = selection.getFormat(0);
+                // Read currently active format (supports seamless StagedUpgradeTrackSelection)
+                Format format = selection.getSelectedFormat();
 
                 mEventListener.onTrackChanged(ExoFormatItem.from(format));
 

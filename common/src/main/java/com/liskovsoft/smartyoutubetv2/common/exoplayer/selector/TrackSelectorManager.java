@@ -21,6 +21,7 @@ import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.track.MediaTrack
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.track.VideoTrack;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.versions.selector.RestoreTrackSelector;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.versions.selector.RestoreTrackSelector.TrackSelectorCallback;
+import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
@@ -50,6 +51,11 @@ public class TrackSelectorManager implements TrackSelectorCallback {
     private final Renderer[] mRenderers = new Renderer[3];
     private final MediaTrack[] mSelectedTracks = new MediaTrack[3];
     private boolean mIsMergedSource;
+    private boolean mStagedFastStartEnabled;
+
+    public void setStagedFastStartEnabled(boolean enabled) {
+        mStagedFastStartEnabled = enabled;
+    }
 
     public TrackSelectorManager(Context context) {
         mContext = context.getApplicationContext();
@@ -319,7 +325,17 @@ public class TrackSelectorManager implements TrackSelectorCallback {
         MediaTrack matchedTrack = findBestMatch(selectedTrack);
 
         if (matchedTrack.groupIndex != -1) {
-            Definition definition = new Definition(groups.get(matchedTrack.groupIndex), matchedTrack.trackIndex);
+            TrackGroup group = groups.get(matchedTrack.groupIndex);
+            int fastStartIdx = -1;
+            if (mStagedFastStartEnabled
+                    && selectedTrack.rendererIndex == RENDERER_INDEX_VIDEO
+                    && matchedTrack.format != null
+                    && matchedTrack.format.height > 720) {
+                fastStartIdx = findSameCodecFastStartTrack(group, matchedTrack.format, matchedTrack.trackIndex);
+            }
+            Definition definition = (fastStartIdx != -1)
+                    ? new Definition(group, fastStartIdx, matchedTrack.trackIndex)
+                    : new Definition(group, matchedTrack.trackIndex);
             definitionPair = new Pair<>(definition, matchedTrack);
             setSelection(matchedTrack.rendererIndex, matchedTrack.groupIndex, matchedTrack.trackIndex);
         } else {
@@ -327,6 +343,59 @@ public class TrackSelectorManager implements TrackSelectorCallback {
         }
 
         return definitionPair;
+    }
+
+    /**
+     * Finds the sharpest <=720p track inside the EXACT same TrackGroup & codec family as the
+     * user's full-quality target so ExoPlayer can start fast on 720p and upgrade on the very
+     * next buffer chunk without flushing the buffer or recreating the decoder.
+     */
+    private int findSameCodecFastStartTrack(TrackGroup group, Format target, int targetIdx) {
+        if (group == null || target == null || group.length < 2) {
+            return -1;
+        }
+        String targetMime = target.sampleMimeType;
+        String targetCodecPrefix = extractCodecPrefix(target.codecs);
+        int bestIdx = -1;
+        int bestHeight = -1;
+        int bestBitrate = -1;
+        for (int i = 0; i < group.length; i++) {
+            if (i == targetIdx) {
+                continue;
+            }
+            Format f = group.getFormat(i);
+            if (f == null || f.height < 480 || f.height > 720) {
+                continue;
+            }
+            if (targetMime != null && !targetMime.equals(f.sampleMimeType)) {
+                continue;
+            }
+            if (targetCodecPrefix != null && !targetCodecPrefix.equals(extractCodecPrefix(f.codecs))) {
+                continue;
+            }
+            // Must have strictly lower bitrate than target so BaseTrackSelection puts target at index 0 and fast-start at index 1
+            if (target.bitrate > 0 && f.bitrate >= target.bitrate) {
+                continue;
+            }
+            if (f.height > bestHeight || (f.height == bestHeight && f.bitrate > bestBitrate)) {
+                bestHeight = f.height;
+                bestBitrate = f.bitrate;
+                bestIdx = i;
+            }
+        }
+        if (bestIdx != -1) {
+            Log.d("CinemaHandoff", "Paired staged tracks in same group: fast=" + group.getFormat(bestIdx)
+                    + " -> full=" + target);
+        }
+        return bestIdx;
+    }
+
+    private static String extractCodecPrefix(String codecs) {
+        if (TextUtils.isEmpty(codecs)) {
+            return null;
+        }
+        int dot = codecs.indexOf('.');
+        return dot > 0 ? codecs.substring(0, dot).toLowerCase() : codecs.toLowerCase();
     }
 
     private Pair<Definition, MediaTrack> createRendererSelection(int rendererIndex, TrackGroupArray groups, Parameters params) {
@@ -371,6 +440,12 @@ public class TrackSelectorManager implements TrackSelectorCallback {
 
     @Override
     public Pair<Definition, MediaTrack> onSelectAudioTrack(TrackGroupArray groups, Parameters params) {
+        if (mSelectedTracks[RENDERER_INDEX_AUDIO] == null
+                && !params.hasSelectionOverride(RENDERER_INDEX_AUDIO, groups)
+                && !GeneralData.instance(mContext).isDeveloperModeEnabled()) {
+            initRenderer(RENDERER_INDEX_AUDIO, groups, params);
+            return createSelection(groups, MediaTrack.forRendererIndex(RENDERER_INDEX_AUDIO));
+        }
         return createRendererSelection(RENDERER_INDEX_AUDIO, groups, params);
     }
 
@@ -468,6 +543,16 @@ public class TrackSelectorManager implements TrackSelectorCallback {
 
         Renderer renderer = mRenderers[originTrack.rendererIndex];
 
+        // In standard mode (Developer Mode OFF), always lock audio to the highest quality safe stream
+        // available for the preferred language, completely independent of selected video resolution.
+        if (originTrack instanceof AudioTrack && !GeneralData.instance(mContext).isDeveloperModeEnabled()) {
+            MediaTrack highestAudio = findHighestQualityAudioTrack(renderer, originTrack);
+            if (highestAudio != null) {
+                Log.d(TAG, "findBestMatch: Locked highest-quality audio: " + highestAudio.format);
+                return highestAudio;
+            }
+        }
+
         MediaTrack result = createAutoSelection(originTrack.rendererIndex);
 
         if (originTrack.format != null) { // not auto selection
@@ -558,6 +643,59 @@ public class TrackSelectorManager implements TrackSelectorCallback {
         Log.d(TAG, "findBestMatch: Found: " + result.format);
 
         return result;
+    }
+
+    /**
+     * Picks the highest-quality safe audio stream in the user's preferred language irrespective of
+     * video resolution (prefers highest bitrate, full dynamic range over DRC at equal bitrate,
+     * and higher channel count / Opus-AC3-EC3 efficiency on ties).
+     */
+    private MediaTrack findHighestQualityAudioTrack(Renderer renderer, MediaTrack originTrack) {
+        if (renderer == null || renderer.mediaTracks == null) {
+            return null;
+        }
+        MediaTrack[][] mediaTracks = filterByLanguage(renderer.mediaTracks, originTrack);
+        MediaTrack best = null;
+        for (MediaTrack[] trackGroup : mediaTracks) {
+            if (trackGroup == null) {
+                continue;
+            }
+            for (MediaTrack candidate : trackGroup) {
+                if (candidate == null || candidate.format == null || hasPlaybackGlitch(candidate)) {
+                    continue;
+                }
+                if (best == null || isHigherQualityAudio(candidate, best)) {
+                    best = candidate;
+                }
+            }
+        }
+        return best;
+    }
+
+    private static boolean isHigherQualityAudio(MediaTrack candidate, MediaTrack currentBest) {
+        Format c = candidate.format;
+        Format b = currentBest.format;
+        // Prefer full dynamic range (non-DRC) when bitrates are within 10 kbps
+        boolean cDrc = TrackSelectorUtil.isDrc(c);
+        boolean bDrc = TrackSelectorUtil.isDrc(b);
+        int cBitrate = Math.max(0, c.bitrate);
+        int bBitrate = Math.max(0, b.bitrate);
+        if (Math.abs(cBitrate - bBitrate) > 10_000) {
+            return cBitrate > bBitrate;
+        }
+        if (cDrc != bDrc) {
+            return !cDrc;
+        }
+        if (c.channelCount != b.channelCount) {
+            return c.channelCount > b.channelCount;
+        }
+        if (c.sampleRate != b.sampleRate) {
+            return c.sampleRate > b.sampleRate;
+        }
+        if (cBitrate != bBitrate) {
+            return cBitrate > bBitrate;
+        }
+        return MediaTrack.getCodecWeight(c.codecs) > MediaTrack.getCodecWeight(b.codecs);
     }
 
     private void applyOverride(int rendererIndex) {

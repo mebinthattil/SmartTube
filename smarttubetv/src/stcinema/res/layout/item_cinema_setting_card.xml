@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/cinema_setting_card"
+    android:layout_width="match_parent"
+    android:layout_height="84dp"
+    android:layout_margin="7dp"
+    android:background="@drawable/bg_cinema_settings_card"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="18dp"
+    android:paddingEnd="16dp">
+
+    <ImageView
+        android:id="@+id/cinema_setting_icon"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:scaleType="fitCenter" />
+
+    <TextView
+        android:id="@+id/cinema_setting_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="14dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium"
+        android:maxLines="2"
+        android:textColor="@color/cinema_text_primary"
+        android:textSize="13sp" />
+
+    <LinearLayout
+        android:id="@+id/cinema_setting_status_pill"
+        android:layout_width="wrap_content"
+        android:layout_height="22dp"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/bg_cinema_pill_emerald"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:visibility="gone">
+
+        <View
+            android:layout_width="6dp"
+            android:layout_height="6dp"
+            android:background="@drawable/bg_cinema_dot_emerald" />
+
+        <TextView
+            android:id="@+id/cinema_setting_status_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="5dp"
+            android:fontFamily="sans-serif-medium"
+            android:text="ON"
+            android:textColor="@color/cinema_emerald_soft"
+            android:textSize="10.5sp" />
+    </LinearLayout>
+</LinearLayout>

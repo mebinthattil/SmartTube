@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Apple tvOS Multi-Choice Row: Inset White Focus Pill + Clean Checkmark -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/container"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_cinema_dialog_item"
+    android:clickable="true"
+    android:focusable="true"
+    android:descendantFocusability="blocksDescendants"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="24dp"
+    android:paddingEnd="22dp">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:duplicateParentState="true"
+        android:orientation="vertical">
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="@dimen/lb_preference_item_text_space_top" />
+
+        <TextView
+            android:id="@android:id/title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:duplicateParentState="true"
+            android:fontFamily="sans-serif-medium"
+            android:lineSpacingMultiplier="1.15"
+            android:textColor="@color/cinema_dialog_item_text"
+            android:textSize="@dimen/lb_preference_item_primary_text_size" />
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="@dimen/lb_preference_item_text_space_bottom" />
+    </LinearLayout>
+
+    <CheckBox
+        android:id="@+id/button"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:layout_marginStart="12dp"
+        android:background="@android:color/transparent"
+        android:button="@drawable/selector_cinema_radio_btn"
+        android:clickable="false"
+        android:duplicateParentState="true"
+        android:focusable="false" />
+</LinearLayout>

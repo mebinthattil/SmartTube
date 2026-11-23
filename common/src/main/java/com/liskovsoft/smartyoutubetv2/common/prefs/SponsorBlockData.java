@@ -290,16 +290,29 @@ public class SponsorBlockData {
             }
         }
 
-        // Easy add new segments
+        // Easy add new segments (default to clickable 5s confirmation popup, never auto-skip)
         for (String segmentCategory : mAllCategories) {
             if (getAction(segmentCategory) == ACTION_UNDEFINED) {
-                // Disable filler category by default
-                // This category is very extreme and is recommended to be disabled by default because of that.
                 if (SponsorSegment.CATEGORY_FILLER.equals(segmentCategory)) {
                     mActions.add(SegmentAction.from(segmentCategory, ACTION_DO_NOTHING));
                 } else {
-                    mActions.add(SegmentAction.from(segmentCategory, ACTION_SKIP_WITH_TOAST));
+                    mActions.add(SegmentAction.from(segmentCategory, ACTION_SHOW_DIALOG));
                 }
+            }
+        }
+
+        // One-time migration for existing installs so SponsorBlock asks via 5s popup instead of auto-skipping
+        if (!"1".equals(mAppPrefs.getData("cinema_sb_popup_default_v1"))) {
+            boolean changed = false;
+            for (SegmentAction action : mActions) {
+                if (action.actionType == ACTION_SKIP_WITH_TOAST || action.actionType == ACTION_SKIP_ONLY) {
+                    action.actionType = ACTION_SHOW_DIALOG;
+                    changed = true;
+                }
+            }
+            mAppPrefs.setData("cinema_sb_popup_default_v1", "1");
+            if (changed) {
+                persistState();
             }
         }
     }

@@ -8,8 +8,13 @@ import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.DefaultLoadControl;
 import com.google.android.exoplayer2.DefaultRenderersFactory;
 import com.google.android.exoplayer2.ExoPlayerFactory;
+import com.google.android.exoplayer2.LoadControl;
+import com.google.android.exoplayer2.Renderer;
 import com.google.android.exoplayer2.SeekParameters;
 import com.google.android.exoplayer2.SimpleExoPlayer;
+import com.google.android.exoplayer2.source.TrackGroupArray;
+import com.google.android.exoplayer2.trackselection.TrackSelectionArray;
+import com.google.android.exoplayer2.upstream.Allocator;
 import com.google.android.exoplayer2.audio.AudioAttributes;
 import com.google.android.exoplayer2.drm.DefaultDrmSessionManager;
 import com.google.android.exoplayer2.drm.DrmSessionManager;
@@ -34,7 +39,20 @@ public class ExoPlayerInitializer {
     private VolumeBooster mVolumeBooster;
     private float mVolumeBoost;
     private SimpleExoPlayer mPlayer;
+    private StagedLoadControl mLoadControl;
+    private volatile long mPreviewBufferCapUs;
     private static AudioAttributes sAudioAttributes;
+
+    public void setPreviewBufferCapMs(long capMs) {
+        mPreviewBufferCapUs = capMs > 0 ? capMs * 1_000L : 0L;
+        if (mLoadControl != null) {
+            mLoadControl.setBufferCapUs(mPreviewBufferCapUs);
+        }
+    }
+
+    public void expandBufferForFullscreen() {
+        setPreviewBufferCapMs(0L);
+    }
 
     public ExoPlayerInitializer(Context context) {
         mPlayerData = PlayerData.instance(context);
@@ -49,13 +67,13 @@ public class ExoPlayerInitializer {
     }
 
     public SimpleExoPlayer createPlayer(Context context, DefaultRenderersFactory renderersFactory, DefaultTrackSelector trackSelector) {
-        DefaultLoadControl loadControl = createLoadControl();
+        mLoadControl = new StagedLoadControl(createLoadControl(), mPreviewBufferCapUs);
 
         // HDR fix?
         //trackSelector.setParameters(trackSelector.buildUponParameters().setTunnelingAudioSessionId(C.generateAudioSessionIdV21(context)));
 
         // Old initializer
-        SimpleExoPlayer player = ExoPlayerFactory.newSimpleInstance(context, renderersFactory, trackSelector, loadControl);
+        SimpleExoPlayer player = ExoPlayerFactory.newSimpleInstance(context, renderersFactory, trackSelector, mLoadControl);
 
         // New initializer
         //SimpleExoPlayer player = ExoPlayerFactory.newSimpleInstance(
@@ -106,11 +124,12 @@ public class ExoPlayerInitializer {
         //DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS // 2_500
         //DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS // 5_000
 
-        // Default values
+        // Balanced fast-start Apple TV Cinema defaults: 1.25s A/V pre-roll keeps audio & video
+        // tightly synced without startup jitter while still starting 2x faster than stock 2.5s.
         int minBufferMs = 30_000;
         int maxBufferMs = 30_000;
-        int bufferForPlaybackMs = 2_500;
-        int bufferForPlaybackAfterRebufferMs = 5_000;
+        int bufferForPlaybackMs = 1_250;
+        int bufferForPlaybackAfterRebufferMs = 2_000;
 
         switch (mPlayerData.getVideoBufferType()) {
             case PlayerData.BUFFER_HIGHEST:
@@ -243,6 +262,74 @@ public class ExoPlayerInitializer {
         @Override
         public void removeEventListener(EventListener eventListener) {
             // Do nothing.
+        }
+    }
+
+    /**
+     * Wraps DefaultLoadControl so Hero previews cap ahead-buffering at ~5-6s (ensuring low
+     * bandwidth + quick next-chunk quality upgrade on click), then immediately expands back
+     * to the full 30s buffer when handed off to fullscreen playback.
+     */
+    private static final class StagedLoadControl implements LoadControl {
+        private final DefaultLoadControl mDelegate;
+        private volatile long mBufferCapUs;
+
+        StagedLoadControl(DefaultLoadControl delegate, long bufferCapUs) {
+            mDelegate = delegate;
+            mBufferCapUs = bufferCapUs;
+        }
+
+        void setBufferCapUs(long capUs) {
+            mBufferCapUs = capUs;
+        }
+
+        @Override
+        public void onPrepared() {
+            mDelegate.onPrepared();
+        }
+
+        @Override
+        public void onTracksSelected(Renderer[] renderers, TrackGroupArray trackGroups, TrackSelectionArray trackSelections) {
+            mDelegate.onTracksSelected(renderers, trackGroups, trackSelections);
+        }
+
+        @Override
+        public void onStopped() {
+            mDelegate.onStopped();
+        }
+
+        @Override
+        public void onReleased() {
+            mDelegate.onReleased();
+        }
+
+        @Override
+        public Allocator getAllocator() {
+            return mDelegate.getAllocator();
+        }
+
+        @Override
+        public long getBackBufferDurationUs() {
+            return mDelegate.getBackBufferDurationUs();
+        }
+
+        @Override
+        public boolean retainBackBufferFromKeyframe() {
+            return mDelegate.retainBackBufferFromKeyframe();
+        }
+
+        @Override
+        public boolean shouldContinueLoading(long bufferedDurationUs, float playbackSpeed) {
+            long cap = mBufferCapUs;
+            if (cap > 0 && bufferedDurationUs >= cap) {
+                return false;
+            }
+            return mDelegate.shouldContinueLoading(bufferedDurationUs, playbackSpeed);
+        }
+
+        @Override
+        public boolean shouldStartPlayback(long bufferedDurationUs, float playbackSpeed, boolean rebuffering) {
+            return mDelegate.shouldStartPlayback(bufferedDurationUs, playbackSpeed, rebuffering);
         }
     }
 }

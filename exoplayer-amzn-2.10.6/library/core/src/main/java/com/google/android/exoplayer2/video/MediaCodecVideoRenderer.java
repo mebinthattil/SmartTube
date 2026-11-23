@@ -596,6 +596,15 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
   @Override
   protected @KeepCodecResult int canKeepCodec(
       MediaCodec codec, MediaCodecInfo codecInfo, Format oldFormat, Format newFormat) {
+    // Prevent NV12/YUV chroma-plane inversion (green/magenta tint) on goldfish/MediaTek/AVC
+    // decoders when adaptive next-chunk quality upgrade increases resolution mid-stream:
+    // cleanly re-initializing MediaCodec takes ~20ms with zero buffer flush and perfect colors.
+    boolean resolutionChanged = oldFormat.width != newFormat.width || oldFormat.height != newFormat.height;
+    if (resolutionChanged && (MimeTypes.VIDEO_H264.equals(newFormat.sampleMimeType)
+            || (codecInfo.name != null && (codecInfo.name.contains("goldfish")
+                    || codecInfo.name.toLowerCase().contains("mtk"))))) {
+      return KEEP_CODEC_RESULT_NO;
+    }
     if (codecInfo.isSeamlessAdaptationSupported(
             oldFormat, newFormat, /* isNewFormatComplete= */ true)
         && newFormat.width <= codecMaxValues.width

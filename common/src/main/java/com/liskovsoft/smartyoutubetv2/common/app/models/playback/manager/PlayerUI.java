@@ -39,4 +39,6 @@ public interface PlayerUI {
     void setSeekBarSegments(List<SeekBarSegment> segments);
     void updateEndingTime();
     void setChatReceiver(ChatReceiver chatReceiver);
+    default void showSponsorSkipPopup(long skipPosMs, String categoryLabel) {}
+    default void hideSponsorSkipPopup() {}
 }
